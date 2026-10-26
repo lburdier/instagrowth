@@ -10,6 +10,46 @@
 
   const URL_RE = /\/graphql|\/api\/v1\/(feed|media|users|clips|discover)/;
 
+  // --- Mode fantôme stories -----------------------------------------------------
+  // Quand il est actif (attribut posé sur <html> par le content script), les
+  // requêtes qui signalent « story vue » ne partent pas : Instagram reçoit une
+  // réponse factice et la story ne te compte pas dans ses vues.
+  const SEEN_URL = /\/stories\/reel\/seen|\/stories\/reel\/mark_seen|\/api\/v2\/media\/seen|\/media\/seen\//i;
+  // Uniquement les stories / reels de stories : les « vu » des DM et notifications ne sont pas touchés.
+  const SEEN_NAME = /(Stor(y|ies)|Reel)\w*Seen|Seen\w*(Stor(y|ies)|Reel)|reel_seen|reel\/seen|reels?_mark_seen/i;
+  const FAKE = '{"status":"ok","data":{}}';
+  const ghostOn = () => document.documentElement.getAttribute('data-igg-ghost') === '1';
+
+  function bodyText(b) {
+    try {
+      if (!b) return '';
+      if (typeof b === 'string') return b;
+      if (b instanceof URLSearchParams) return b.toString();
+      if (b instanceof FormData) return [...b.entries()].map(([k, v]) => `${k}=${typeof v === 'string' ? v : ''}`).join('&');
+    } catch { /* corps illisible */ }
+    return '';
+  }
+
+  function headerValue(h, name) {
+    try {
+      if (!h) return '';
+      if (h instanceof Headers) return h.get(name) || '';
+      if (Array.isArray(h)) return (h.find(([k]) => k.toLowerCase() === name) || [])[1] || '';
+      const k = Object.keys(h).find((x) => x.toLowerCase() === name);
+      return k ? String(h[k]) : '';
+    } catch { return ''; }
+  }
+
+  function isStorySeen(url, body, friendlyName) {
+    if (!ghostOn()) return false;
+    const text = decodeURIComponent(bodyText(body).replace(/\+/g, ' ')).slice(0, 4000);
+    return SEEN_URL.test(url) || SEEN_NAME.test(friendlyName || '') || /fb_api_req_friendly_name=[^&]*(Stor|Reel)[^&]*Seen/i.test(text) || (/\/graphql/.test(url) && SEEN_NAME.test(text));
+  }
+
+  function notifyBlocked() {
+    window.postMessage({ source: 'igg-ghost-blocked' }, location.origin);
+  }
+
   function slim(m) {
     const user = m.user || m.owner || {};
     return {
@@ -59,6 +99,13 @@
 
   const origFetch = window.fetch;
   window.fetch = function (input, init) {
+    try {
+      const url = typeof input === 'string' ? input : input?.url || '';
+      if (isStorySeen(url, init?.body, headerValue(init?.headers, 'x-fb-friendly-name'))) {
+        notifyBlocked();
+        return Promise.resolve(new Response(FAKE, { status: 200, headers: { 'content-type': 'application/json' } }));
+      }
+    } catch { /* ne jamais casser la page */ }
     const p = origFetch.apply(this, arguments);
     try {
       const url = typeof input === 'string' ? input : input?.url || '';
@@ -69,11 +116,28 @@
 
   const open = XMLHttpRequest.prototype.open;
   const send = XMLHttpRequest.prototype.send;
+  const setHeader = XMLHttpRequest.prototype.setRequestHeader;
   XMLHttpRequest.prototype.open = function (method, url) {
     this.__iggUrl = String(url || '');
+    this.__iggName = '';
     return open.apply(this, arguments);
   };
-  XMLHttpRequest.prototype.send = function () {
+  XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+    if (String(name).toLowerCase() === 'x-fb-friendly-name') this.__iggName = String(value);
+    return setHeader.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function (body) {
+    if (isStorySeen(this.__iggUrl || '', body, this.__iggName)) {
+      notifyBlocked();
+      const xhr = this;
+      setTimeout(() => {
+        const values = { readyState: 4, status: 200, statusText: 'OK', responseText: FAKE, responseURL: xhr.__iggUrl,
+          response: xhr.responseType === 'json' ? JSON.parse(FAKE) : FAKE };
+        for (const [k, v] of Object.entries(values)) Object.defineProperty(xhr, k, { configurable: true, get: () => v });
+        for (const type of ['readystatechange', 'load', 'loadend']) xhr.dispatchEvent(new Event(type));
+      }, 30);
+      return undefined;
+    }
     if (URL_RE.test(this.__iggUrl || '')) {
       this.addEventListener('load', () => {
         try {

@@ -8,8 +8,9 @@ import { injectProfile } from './profile.js';
 import { injectPosts } from './post.js';
 import { injectDm } from './dm.js';
 import { injectGrid } from './grid.js';
+import { initGhost, injectGhostBadge } from './ghost.js';
 
-const FEATURES = [injectNav, injectProfile, injectPosts, injectGrid, injectDm];
+const FEATURES = [injectNav, injectProfile, injectPosts, injectGrid, injectDm, injectGhostBadge];
 let timer = null;
 let observer = null;
 let lastPath = location.pathname;
@@ -37,6 +38,8 @@ function schedule() {
 }
 
 export function start() {
+  // Repasse une fois le réglage lu, pour afficher le badge sans attendre une mutation du DOM.
+  initGhost().then(schedule).catch(() => {});
   run();
   observer = new MutationObserver(schedule);
   observer.observe(document.body, { childList: true, subtree: true });

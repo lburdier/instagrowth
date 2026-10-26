@@ -64,6 +64,15 @@ Tu obtiens les chiffres du post comparés à la moyenne de tes 12 derniers posts
 L'onglet **Auto-like** a quatre vues : **Vue d'ensemble** (statut en direct, derniers comptes likés, prochaines cibles), **Comptes likés** (liste détaillée filtrable : abonnés, post liké, source, date, follow-back, statut de lead, export CSV), **Réglages** et **Journal**.
 Le bouton **Liker maintenant** lance un passage immédiat, hors plage horaire mais dans le respect des plafonds.
 
+## Téléchargement des publications
+
+Sur chaque publication, une icône **Télécharger** a été ajoutée à la barre J'aime / Commenter / Partager. Elle récupère les fichiers en meilleure qualité : photo, chaque slide d'un carrousel, vidéo ou reel. Ils sont enregistrés dans le dossier `Téléchargements/InstaGrowth/`, sous des noms comme `compte_code_1.jpg`. Si l'API ne répond pas, ce sont les images visibles sur la page qui sont téléchargées.
+
+## Mode fantôme stories
+
+Le mode fantôme permet de regarder les stories sans apparaître dans la liste des vues. Il s'active depuis le menu InstaGrowth sur Instagram, la popup de l'extension ou Réglages & IA.
+Pendant la lecture, un badge « Mode fantôme » indique le nombre de vues masquées ; un clic dessus désactive le mode. L'extension bloque uniquement la requête « story vue » qu'Instagram envoie, en lui renvoyant une réponse factice. Les « vu » des messages privés et des notifications ne sont pas touchés.
+
 ## Automatisations d'auto-like
 
 Dans **Auto-like → Automatisations**, chaque règle s'active séparément et ajoute des cibles **prioritaires** dans la file. Ces cibles passent par les mêmes plafonds, délais, plage horaire et jours actifs que le reste :

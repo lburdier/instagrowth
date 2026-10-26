@@ -1,7 +1,7 @@
 // Bouton IA dans la barre d'actions des publications (à côté de J'aime / Commenter / Partager) :
 // propose des commentaires pertinents et les insère dans le champ de commentaire.
 
-import { MARK, unitOf, cloneNative, popover, menu, suggestionsUI, ai, clean, insertInto, toast } from './dom.js';
+import { MARK, unitOf, cloneNative, popover, menu, suggestionsUI, ai, clean, insertInto, toast, send } from './dom.js';
 import { openPanel } from './panel.js';
 
 const COMMENT_RE = /^(Commenter|Comment|Comentar|Kommentieren|Commenta)$/i;
@@ -21,6 +21,18 @@ function postCode(container) {
   const link = container.querySelector('a[href*="/p/"], a[href*="/reel/"]');
   const m = link?.getAttribute('href').match(/\/(?:p|reel)\/([A-Za-z0-9_-]+)/);
   return m?.[1] || fromUrl?.[1] || '';
+}
+
+/** Repli : images visibles de la publication (plus grande taille du srcset), hors photos de profil. */
+function visibleMediaUrls(container) {
+  const urls = [];
+  for (const img of container.querySelectorAll('img')) {
+    if (/profil|profile/i.test(img.alt || '') || img.closest('header')) continue;
+    const best = (img.srcset || '').split(',').map((s) => s.trim().split(/\s+/))
+      .map(([url, w]) => ({ url, w: parseInt(w, 10) || 0 })).sort((a, b) => b.w - a.w)[0]?.url || img.src;
+    if (best && /cdninstagram|fbcdn/.test(best) && (img.naturalWidth || img.width) >= 200 && !urls.includes(best)) urls.push(best);
+  }
+  return urls;
 }
 
 function commentField(container) {
@@ -57,6 +69,23 @@ export function injectPosts() {
       ]),
     });
     row.append(aiBtn);
+
+    const dlBtn = cloneNative(unit, {
+      key: 'post-dl',
+      icon: 'download',
+      title: 'Télécharger les photos / vidéos (InstaGrowth)',
+      onClick: async () => {
+        const code = postCode(container);
+        toast('Téléchargement en cours…');
+        try {
+          const r = await send('media:download', { code, fallbackUrls: visibleMediaUrls(container) });
+          toast(`${r.count} fichier${r.count > 1 ? 's' : ''} téléchargé${r.count > 1 ? 's' : ''}${r.videos ? ` (dont ${r.videos} vidéo${r.videos > 1 ? 's' : ''})` : ''} dans « InstaGrowth »`);
+        } catch (e) {
+          toast(e.message, true);
+        }
+      },
+    });
+    row.append(dlBtn);
 
     function commentPopover(target) {
       popover(target, (pop) => suggestionsUI(pop, {

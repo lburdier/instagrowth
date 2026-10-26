@@ -17,6 +17,9 @@ export const DEFAULT_SETTINGS = {
     language: 'fr',
     offer: '',
   },
+  ghost: {
+    stories: false, // mode fantôme : regarder les stories sans apparaître dans les vues
+  },
   publish: {
     mode: 'reminder', // reminder | auto (API web non officielle, expérimental)
     defaultHashtagSets: [],

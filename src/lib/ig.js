@@ -425,6 +425,23 @@ export async function mediaPkFromUrl(url) {
   return shortcodeToPk(codeFromRef(url));
 }
 
+/** URL de la meilleure qualité disponible (vidéo si présente, sinon plus grande image). */
+function bestFile(m) {
+  const video = [...(m.video_versions || [])].sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+  if (video?.url) return { url: video.url, type: 'video' };
+  const img = [...(m.image_versions2?.candidates || [])].sort((a, b) => (b.width || 0) - (a.width || 0))[0];
+  return img?.url ? { url: img.url, type: 'image' } : null;
+}
+
+/** Tous les fichiers d'une publication (chaque slide d'un carrousel). */
+export async function mediaFiles(code) {
+  const d = await request(`/api/v1/media/${shortcodeToPk(code)}/info/`);
+  const item = d?.items?.[0];
+  if (!item) throw new IgError('Publication introuvable', { kind: 'notfound', status: 404 });
+  const parts = item.carousel_media?.length ? item.carousel_media : [item];
+  return { username: item.user?.username || 'instagram', files: parts.map(bestFile).filter(Boolean) };
+}
+
 export async function mediaInfo(pk) {
   const d = await request(`/api/v1/media/${pk}/info/`);
   const item = d?.items?.[0];

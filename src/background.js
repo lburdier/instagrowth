@@ -710,6 +710,28 @@ const handlers = {
   async 'app:open'({ hash }) { await openApp(hash); return true; },
 
   async 'ig:session'() { return ig.session(); },
+  async 'media:download'({ code, fallbackUrls = [], username = '' }) {
+    let files = [];
+    let owner = username || 'instagram';
+    if (code) {
+      try {
+        const r = await ig.mediaFiles(code);
+        files = r.files;
+        owner = r.username;
+      } catch (e) {
+        if (!fallbackUrls.length) throw e;
+      }
+    }
+    // Repli : images visibles sur la page (meilleure taille du srcset).
+    if (!files.length) files = fallbackUrls.map((url) => ({ url, type: /\.mp4/.test(url) ? 'video' : 'image' }));
+    if (!files.length) throw new Error('Aucun média téléchargeable trouvé.');
+    for (const [i, f] of files.entries()) {
+      const ext = (f.url.match(/\.(jpe?g|png|webp|heic|mp4)(?:\?|$)/i)?.[1] || (f.type === 'video' ? 'mp4' : 'jpg')).toLowerCase();
+      const name = `InstaGrowth/${owner}_${code || Date.now()}${files.length > 1 ? `_${i + 1}` : ''}.${ext}`.replace(/[^\w./-]/g, '_');
+      await chrome.downloads.download({ url: f.url, filename: name, conflictAction: 'uniquify' });
+    }
+    return { count: files.length, videos: files.filter((f) => f.type === 'video').length };
+  },
   async 'capture:media'({ items }) { if (Array.isArray(items) && items.length) await storeCaptured(items.slice(0, 500)); return true; },
   async 'claude:startConnect'(_, sender) {
     const tab = await chrome.tabs.create({ url: CLAUDE_KEYS_URL, openerTabId: sender.tab?.id });

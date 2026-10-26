@@ -24,6 +24,7 @@ async function render() {
 
   const s = await getSettings();
   $('#al').checked = s.autolike.enabled;
+  $('#ghost').checked = Boolean(s.ghost?.stories);
   const today = dayKey();
   const likes = st.day === today ? st.likesToday || 0 : 0;
   const limit = effectiveDailyLimit(s.autolike, st.firstRunDay || today, today);
@@ -37,6 +38,8 @@ async function render() {
     ? `<strong class="row" style="gap:6px"><i data-i="clock"></i> Prochain post</strong><br><small>${fmtDate(p.scheduledAt)} — ${escapeHtml(p.caption.slice(0, 70) || 'Sans légende')}</small>`
     : '<strong class="row" style="gap:6px"><i data-i=\"clock\"></i> Aucun post programmé</strong>';
 }
+
+$('#ghost').onchange = (e) => saveSettings({ ghost: { stories: e.target.checked } });
 
 $('#al').onchange = async (e) => {
   const s = await getSettings();

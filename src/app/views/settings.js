@@ -163,6 +163,13 @@ export default {
             <label class="check"><input type="radio" name="pmode" value="auto"> <span><strong>Publication automatique</strong> — photos et carrousels publiés via l’API web d’Instagram (non officielle, expérimental). Le navigateur doit être ouvert.</span></label>
           </div>
           <div class="card">
+            <h2 class="h-ico"><i data-i="ghost"></i> Mode fantôme</h2>
+            <div class="row between" style="flex-wrap:nowrap;gap:16px">
+              <div><strong>Stories en mode fantôme</strong><p class="muted" style="margin:4px 0 0">Regarde les stories sans apparaître dans la liste des vues. Un badge le rappelle pendant la lecture. Les « vu » des messages privés ne sont pas concernés.</p></div>
+              <label class="switch"><input type="checkbox" id="ghost-stories"><span></span></label>
+            </div>
+          </div>
+          <div class="card">
             <h2 class="h-ico"><i data-i="database"></i> Données</h2>
             <p class="muted">Tout est stocké localement dans ton navigateur. Rien n’est envoyé ailleurs qu’à Instagram et au fournisseur d’IA choisi.</p>
             <div class="row">
@@ -185,6 +192,11 @@ export default {
     const b = s.brand;
     for (const k of ['niche', 'audience', 'offer', 'tone', 'language']) $(`#b-${k}`, el).value = b[k] || '';
     $$('input[name=pmode]', el).forEach((r) => { r.checked = r.value === s.publish.mode; });
+    $('#ghost-stories', el).checked = Boolean(s.ghost?.stories);
+    $('#ghost-stories', el).onchange = async (e) => {
+      s = await saveSettings({ ghost: { stories: e.target.checked } });
+      toast(e.target.checked ? 'Mode fantôme activé' : 'Mode fantôme désactivé');
+    };
 
     $$('.provider-card', el).forEach((c) => c.onclick = () => { s.ai = { ...readAi(), provider: c.dataset.p }; renderProvider(); });
     $('#an-auth', el).onchange = () => { s.ai = readAi(); renderProvider(); };

@@ -3,6 +3,7 @@
 
 import { MARK, cloneNative, menu, send } from './dom.js';
 import { openPanel } from './panel.js';
+import { isGhost, setGhost } from './ghost.js';
 
 const SIBLING_LINKS = 'a[href="/reels/"], a[href="/direct/inbox/"]';
 
@@ -28,6 +29,7 @@ export function injectNav() {
       { icon: 'target', label: 'Leads', run: () => openPanel('leads') },
       { icon: 'heart', label: 'Auto-like', run: () => openPanel('autolike') },
       { icon: 'settings', label: 'Réglages & IA', run: () => openPanel('settings') },
+      { icon: 'ghost', label: isGhost() ? 'Mode fantôme stories : activé' : 'Mode fantôme stories : désactivé', run: () => setGhost(!isGhost()) },
       { icon: 'monitor', label: 'Ouvrir le dashboard complet', run: () => send('app:open', { hash: 'dashboard' }) },
     ]),
   });

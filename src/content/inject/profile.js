@@ -3,6 +3,7 @@
 
 import { MARK, findClickables, unitOf, cloneNative, menu, send, toast } from './dom.js';
 import { openPanel } from './panel.js';
+import { isGhost, setGhost } from './ghost.js';
 
 const RESERVED = new Set(['explore', 'reels', 'direct', 'accounts', 'p', 'reel', 'stories', 'about', 'legal', 'developer', 'create', 'tv', 'web', 'emails', 'challenge', 'session']);
 const OWN_RE = /^(Modifier le profil|Edit profile|Editar perfil|Profil bearbeiten|Modifica profilo)$/i;
@@ -44,6 +45,7 @@ export function injectProfile() {
         { icon: 'target', label: 'Leads', run: () => openPanel('leads') },
         { icon: 'heart', label: 'Auto-like', run: () => openPanel('autolike') },
         { icon: 'settings', label: 'Réglages & IA', run: () => openPanel('settings') },
+        { icon: 'ghost', label: isGhost() ? 'Mode fantôme stories : activé' : 'Mode fantôme stories : désactivé', run: () => setGhost(!isGhost()) },
         { icon: 'monitor', label: 'Ouvrir le dashboard complet', run: () => send('app:open', { hash: 'dashboard' }) },
       ]),
     });
