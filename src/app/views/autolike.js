@@ -183,7 +183,8 @@ function renderLiked() {
           <br><small>${escapeHtml(l.fullName || '')}</small></div></div></td>
         <td>${fmtNum(l.followers)}</td>
         <td>${l.thumb ? `<a class="lk-thumb" href="https://www.instagram.com/p/${l.code}/" target="_blank" title="Voir le post liké" style="background-image:url('${escapeHtml(l.thumb)}')"></a>` : '—'}</td>
-        <td style="font-size:12px">${escapeHtml(l.source)}${l.forced ? '<br><small>manuel</small>' : ''}</td>
+        <td style="font-size:12px">${escapeHtml(l.source)}${l.forced ? '<br><small>manuel</small>' : ''}
+          ${l.verified ? `<br><span class="verified-like" title="Instagram a confirmé le like${l.via === 'page' ? ' (clic sur la page)' : ''}">${icon('check', 12)} vérifié</span>` : '<br><small class="muted">non vérifié</small>'}</td>
         <td style="font-size:12px;white-space:nowrap">${fmtDate(l.ts)}</td>
         <td>${followBackBadge(l)}</td>
         <td>${lead ? `<span class="badge ${lead.status}">${STATUSES[lead.status] || lead.status}</span>` : '<span class="muted">—</span>'}</td>

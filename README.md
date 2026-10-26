@@ -83,6 +83,8 @@ Dans **Auto-like → Automatisations**, chaque règle s'active séparément et a
 
 Les règles tournent toutes les 30 minutes ; le bouton **Lancer maintenant** déclenche une règle tout de suite. Les **jours actifs** se règlent dans Auto-like → Réglages.
 
+**Chaque like est réel et vérifié** : il n'est compté que si Instagram le confirme. Soit la publication apparaît comme likée par toi (`has_liked`), soit le cœur est bien passé au rouge sur la page. Dans la liste des comptes likés, ces likes portent la mention « vérifié ».
+
 Si l'adresse de like d'Instagram change (erreur 404), l'extension essaie d'autres routes connues. Si aucune ne marche, elle ouvre la publication dans un onglet épinglé d'arrière-plan et clique sur le vrai bouton « J'aime ».
 
 ## IA : connexion

@@ -499,7 +499,7 @@ async function autolikeTick(force = false) {
           }
         }
 
-        const via = await ig.likeMedia({ pk: item.mediaPk, ownerPk: item.userPk, code: item.code });
+        const { via } = await ig.likeMedia({ pk: item.mediaPk, ownerPk: item.userPk, code: item.code });
         if (via === 'already') {
           st.liked = [item.mediaPk, ...st.liked].slice(0, 3000);
           alLog(st, 'skip', `@${item.username} : publication déjà likée`);
@@ -510,12 +510,12 @@ async function autolikeTick(force = false) {
         st.history[today] = (st.history[today] || 0) + 1;
         st.liked = [item.mediaPk, ...st.liked].slice(0, 3000);
         st.users[item.userPk] = Date.now();
-        alLog(st, 'like', `Post liké : @${item.username} (${item.source})${via === 'page' ? ' · via la page' : ''}`, { username: item.username, code: item.code, thumb: item.thumb });
+        alLog(st, 'like', `Like vérifié sur Instagram : @${item.username} (${item.source})${via === 'page' ? ' · clic sur la page' : ''}`, { username: item.username, code: item.code, thumb: item.thumb });
         st.likedList = [{
           ts: Date.now(), userPk: item.userPk, username: item.username, mediaPk: item.mediaPk, code: item.code, thumb: item.thumb, source: item.source,
           fullName: profile?.fullName || '', pic: profile?.pic || '', followers: profile?.followers ?? null, following: profile?.following ?? null,
           posts: profile?.posts ?? null, bio: (profile?.bio || '').slice(0, 300), isVerified: Boolean(profile?.isVerified), isBusiness: Boolean(profile?.isBusiness),
-          category: profile?.category || '', forced: force,
+          category: profile?.category || '', forced: force, verified: true, via,
         }, ...st.likedList].slice(0, 1000);
         st.lastResult = `Post de @${item.username} liké (${item.source}).`;
         if (cfg.addToLeads && profile) await upsertLead(leadFromUser(profile, `auto-like ${item.source}`, { status: 'liked', likedAt: Date.now() }));

@@ -169,6 +169,13 @@ async function request(path, { method = 'GET', body, headers = {}, skipThrottle 
   let data = null;
   try { data = JSON.parse(res.text); } catch { data = res.text; }
 
+  if (!raw && typeof data === 'string' && res.status >= 200 && res.status < 300) {
+    // Instagram renvoie parfois une page HTML en 200 sur une route d'API disparue : ce n'est pas un succès.
+    const err = new IgError(`Réponse inattendue d’Instagram (page au lieu de données) [${key}]`, { status: res.status, kind: 'unknown' });
+    err.nonJson = true;
+    throw err;
+  }
+
   if (res.status < 200 || res.status >= 300 || (data && data.status === 'fail')) {
     const kind = classify(res.status, data);
     if (res.status === 429) await setCooldown(key);
@@ -482,21 +489,35 @@ const LIKE_ROUTES = [
 const UI_MODE_MS = 24 * 3600 * 1000;
 
 async function likeViaApi(m) {
-  const { likeRoute = 0 } = await chrome.storage.local.get('likeRoute');
-  const order = [likeRoute, ...LIKE_ROUTES.keys()].filter((v, i, a) => a.indexOf(v) === i);
+  // Clé v2 : l'ancienne mémorisait parfois une route qui répondait 200 sans liker.
+  const { likeRouteV2 = 0 } = await chrome.storage.local.get('likeRouteV2');
+  const order = [likeRouteV2, ...LIKE_ROUTES.keys()].filter((v, i, a) => a.indexOf(v) === i);
   for (const i of order) {
     const r = LIKE_ROUTES[i]?.(m);
     if (!r) continue;
     try {
-      await request(r.path, { method: 'POST', body: r.body || new URLSearchParams() });
-      await chrome.storage.local.set({ likeRoute: i });
+      const d = await request(r.path, { method: 'POST', body: r.body || new URLSearchParams() });
+      if (d?.status !== 'ok') continue; // pas de confirmation explicite : route suivante
+      await chrome.storage.local.set({ likeRouteV2: i });
       return true;
     } catch (e) {
-      // 404/405 : route disparue → suivante. Toute autre erreur (429, action bloquée…) remonte.
-      if (![404, 405].includes(e.status)) throw e;
+      // Seuls les signaux d'Instagram (429, action bloquée, checkpoint, session) remontent et mettent
+      // l'auto-like en pause. Route disparue, refusée (400/403) ou page HTML → route suivante, puis clic.
+      if (['rate', 'feedback', 'checkpoint', 'auth'].includes(e.kind)) throw e;
     }
   }
   return false;
+}
+
+/** Instagram confirme-t-il que la publication est likée par toi ? (null = impossible à vérifier) */
+export async function isLiked(pk) {
+  try {
+    const d = await request(`/api/v1/media/${pk}/info/`);
+    const item = d?.items?.[0];
+    return item ? Boolean(item.has_liked) : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Like via la page de la publication, dans un onglet épinglé d'arrière-plan réutilisé. */
@@ -511,6 +532,7 @@ export async function likeViaPage(code) {
   await chrome.storage.session.set({ likeTabId });
   await waitComplete(tab.id);
   await sleep(2500 + rand(0, 1500));
+  let last = '';
   for (let i = 0; i < 6; i++) {
     let res = null;
     try {
@@ -520,24 +542,40 @@ export async function likeViaPage(code) {
     }
     if (res?.status === 'liked' || res?.status === 'already') return res.status;
     if (res?.status === 'blocked') throw new IgError('Instagram a bloqué l’action J’aime (action bloquée).', { kind: 'feedback' });
+    last = res?.status || last;
     await sleep(1500);
   }
-  throw new IgError('Bouton J’aime introuvable sur la publication.', { kind: 'unknown' });
+  throw new IgError(last === 'notconfirmed'
+    ? 'Like non confirmé par Instagram (le cœur n’est pas passé au rouge) : non compté.'
+    : 'Bouton J’aime introuvable sur la publication : non compté.', { kind: 'unknown' });
 }
 
 /**
- * Like intelligent : API si une route fonctionne, sinon clic sur la page.
- * @returns {'api'|'page'|'already'}
+ * Like RÉEL et vérifié : un like n'est compté que si Instagram le confirme.
+ *  - API : route qui répond {status:"ok"}, puis contrôle has_liked sur la publication ;
+ *  - sinon (ou si le contrôle échoue) : clic sur le vrai bouton J'aime, confirmé quand
+ *    le cœur passe à « Je n'aime plus ».
+ * @returns {{via: 'api'|'page'|'already', verified: boolean}}
  */
 export async function likeMedia({ pk, ownerPk, code }) {
   const { likeUiUntil = 0 } = await chrome.storage.local.get('likeUiUntil');
+  let apiSent = false;
   if (likeUiUntil < Date.now()) {
-    if (await likeViaApi({ pk, ownerPk })) return 'api';
-    // Toutes les routes ont disparu : on passe en mode « page » pour 24 h.
-    await chrome.storage.local.set({ likeUiUntil: Date.now() + UI_MODE_MS });
+    apiSent = await likeViaApi({ pk, ownerPk });
+    if (apiSent) {
+      await sleep(1200);
+      const liked = await isLiked(pk);
+      if (liked === true) return { via: 'api', verified: true };
+      // L'API a répondu « ok » sans que le like apparaisse : on ne lui fait plus confiance pendant 24 h.
+      if (liked === false) await chrome.storage.local.set({ likeUiUntil: Date.now() + UI_MODE_MS });
+    } else {
+      // Toutes les routes ont disparu : mode « page » pour 24 h.
+      await chrome.storage.local.set({ likeUiUntil: Date.now() + UI_MODE_MS });
+    }
   }
   const status = await likeViaPage(code);
-  return status === 'already' ? 'already' : 'page';
+  if (status === 'already') return apiSent ? { via: 'api', verified: true } : { via: 'already', verified: true };
+  return { via: 'page', verified: true };
 }
 
 export async function addComment(mediaPk, text) {
