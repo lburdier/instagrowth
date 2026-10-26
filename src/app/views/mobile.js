@@ -1,6 +1,7 @@
 // Vue Insta mobile : instagram.com en version mobile (stories, reels, posts depuis le PC).
 
 import { $ } from '../ui.js';
+import { TUTOS } from '../tutorial.js';
 import { createPhone, phoneModeNote, bindPhoneModeNote } from '../phone.js';
 
 let phone;
@@ -11,6 +12,7 @@ export default {
   async mount(el) {
     el.innerHTML = `
       <div class="view-head"><div><h1>Insta mobile</h1><p class="muted">L’app mobile d’Instagram dans ton navigateur : publie stories, reels et posts depuis ton ordinateur.</p></div></div>
+      ${TUTOS.mobile()}
       <div class="phone-wrap">
         <div id="m-phone"></div>
         <div class="side-panel stack">

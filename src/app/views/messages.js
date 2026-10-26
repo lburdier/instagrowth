@@ -1,6 +1,7 @@
 // Vue Messages : DM Instagram dans un cadre mobile + réponses rapides + assistant IA.
 
 import { toast, busy, $ } from '../ui.js';
+import { TUTOS } from '../tutorial.js';
 import { createPhone, phoneModeNote, bindPhoneModeNote } from '../phone.js';
 import { getSettings, saveSettings } from '../../lib/store.js';
 import { complete } from '../../lib/ai.js';
@@ -69,6 +70,7 @@ export default {
     el = root;
     el.innerHTML = `
       <div class="view-head"><div><h1>Messages</h1><p class="muted">Tes DM Instagram sur desktop, avec réponses rapides et assistant IA.</p></div></div>
+      ${TUTOS.messages()}
       <div class="phone-wrap">
         <div id="dm-phone"></div>
         <div class="side-panel stack">

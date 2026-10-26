@@ -2,6 +2,7 @@
 // mode de publication, données.
 
 import { busy, toast, send, $, $$ } from '../ui.js';
+import { TUTOS } from '../tutorial.js';
 import { getSettings, saveSettings } from '../../lib/store.js';
 import { CLAUDE_MODELS, connectOpenRouter, listOpenRouterModels, testConnection } from '../../lib/ai.js';
 import { db } from '../../lib/db.js';
@@ -87,6 +88,7 @@ export default {
     s = await getSettings();
     el.innerHTML = `
       <div class="view-head"><div><h1>Réglages &amp; IA</h1><p class="muted">Connecte ton IA, décris ta marque, choisis ton mode de publication.</p></div></div>
+      ${TUTOS.settings()}
 
       <div class="card" style="margin-bottom:16px">
         <h2 class="h-ico"><i data-i="sparkle"></i> Fournisseur d’IA</h2>

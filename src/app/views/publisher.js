@@ -2,6 +2,7 @@
 // aperçu, brouillons, programmation et calendrier.
 
 import { send, busy, toast, $, $$, navigate, activeAccountId } from '../ui.js';
+import { TUTOS } from '../tutorial.js';
 import { db } from '../../lib/db.js';
 import { complete } from '../../lib/ai.js';
 import { getSettings, saveSettings } from '../../lib/store.js';
@@ -346,6 +347,7 @@ export default {
         <div><h1>Publication</h1><p class="muted">Crée, optimise avec l’IA, programme et publie tes posts depuis ton ordinateur.</p></div>
         <button id="pub-new"><i data-i="plus" data-s="16"></i> Nouveau post</button>
       </div>
+      ${TUTOS.publisher()}
       <div class="grid g2" style="margin-bottom:16px;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr)">
         <div class="stack">
           <div class="card">

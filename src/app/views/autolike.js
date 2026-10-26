@@ -2,6 +2,7 @@
 // réglages (cibles, limites) et journal d'activité.
 
 import { send, busy, toast, $, $$, navigate, accountKey } from '../ui.js';
+import { TUTOS } from '../tutorial.js';
 import { getSettings, saveSettings } from '../../lib/store.js';
 import { LIMITS, clampAutolike, effectiveDailyLimit } from '../../lib/limits.js';
 import { db } from '../../lib/db.js';
@@ -18,9 +19,10 @@ let st = {};
 let leadsByPk = new Map();
 const expanded = new Set();
 
-const list = (v) => v.split(/[,\n]/).map((s) => s.trim().replace(/^[#@]/, '')).filter(Boolean);
+// Hashtags et comptes : séparés par des virgules, des espaces ou des retours à la ligne.
+const list = (v) => v.split(/[,\s]+/).map((s) => s.trim().replace(/^[#@]/, '')).filter(Boolean);
 
-const STATE_DOT = { active: 'on', waiting: 'on', outside: 'wait', limit: 'wait', paused: 'bad', nosource: 'off', off: 'off' };
+const STATE_DOT = { active: 'on', waiting: 'on', outside: 'wait', limit: 'wait', paused: 'bad', nosource: 'off', off: 'off', exhausted: 'wait' };
 
 // --- Réglages -----------------------------------------------------------------
 
@@ -100,6 +102,10 @@ function renderOverview() {
     </div>
     ${paused ? `<div class="alert err" style="margin:10px 0 0">${escapeHtml(st.pauseReason)}<br><small>Reprise auto : ${new Date(st.pausedUntil).toLocaleString('fr-FR')}</small>
       <div style="margin-top:6px"><button class="sm" id="al-resume">${st.pauseKind === 'auth' || /Non connecté/.test(st.pauseReason || '') ? 'Réessayer maintenant' : 'Reprendre maintenant (déconseillé)'}</button></div></div>` : ''}
+    ${state === 'exhausted' || state === 'nosource' ? `<div class="alert warn exhausted-alert" style="margin:12px 0 0">
+      <strong>${state === 'nosource' ? 'Aucune source à liker.' : 'Tous les comptes disponibles ont été likés.'}</strong>
+      Ajoute de nouveaux hashtags, des comptes concurrents ou une liste de prospects pour continuer.
+      <div style="margin-top:8px"><button class="sm primary" id="al-add-sources">Ajouter des comptes</button></div></div>` : ''}
     ${state === 'outside' && st.resumeAt ? `<p class="muted" style="margin-top:8px">Les likes reprendront automatiquement ${fmtDate(st.resumeAt)}. Change la plage horaire dans l’onglet Réglages.</p>` : ''}
     <div class="row" style="margin-top:12px;gap:22px">
       <div class="kpi"><span class="label">Cette heure</span><span>${st.hour?.startsWith(today) ? st.likesThisHour || 0 : 0} / ${cfg.hourlyLimit}</span></div>
@@ -110,6 +116,12 @@ function renderOverview() {
     ${st.lastResult ? `<p class="muted" style="margin-top:10px">Dernier passage : ${escapeHtml(st.lastResult)}</p>` : ''}
     ${cfg.warmup && limit < cfg.dailyLimit ? `<p class="muted h-ico" style="margin-top:6px"><i data-i="sprout" data-s="16"></i> Warm-up actif : limite progressive (${limit}/${cfg.dailyLimit}) pendant les 7 premiers jours.</p>` : ''}`;
   $('#al-resume', el)?.addEventListener('click', async () => { await send('autolike:resume'); refresh(); });
+  $('#al-add-sources', el)?.addEventListener('click', () => {
+    setTab('settings');
+    const t = $('#al-prospects', el);
+    t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    t.focus();
+  });
   $('#al-now', el).onclick = (e) => busy(e.currentTarget, async () => {
     if (!cfg.hashtags.length && !cfg.competitors.length && !(cfg.prospects || []).length && !(st.queue || []).length) throw new Error('Ajoute d’abord des hashtags, des concurrents ou une liste de prospects (onglet Réglages).');
     toast(await send('autolike:runNow') || 'Passage terminé');
@@ -333,6 +345,7 @@ export default {
         <div class="row"><span style="font-weight:600">Activer</span><label class="switch"><input type="checkbox" id="al-enabled"><span></span></label></div>
       </div>
 
+      ${TUTOS.autolike()}
       <div class="tabs" id="al-tabs" style="margin-bottom:18px">
         <button data-tab="overview" class="active">Vue d’ensemble</button>
         <button data-tab="liked">Comptes likés<span id="al-tab-liked-count"></span></button>
@@ -378,6 +391,7 @@ export default {
       </section>
 
       <section class="al-section" data-section="auto" hidden>
+        ${TUTOS.automations()}
         <div class="alert info">Les automatisations ajoutent des cibles <strong>prioritaires</strong> dans la file d’auto-like. Elles respectent les mêmes plafonds, délais, plage horaire et jours actifs, et l’auto-like doit être activé (interrupteur en haut à droite). Elles tournent toutes les 30 minutes.</div>
         <div class="stack" id="auto-list"></div>
       </section>
@@ -392,7 +406,7 @@ export default {
         <div class="grid g2">
           <div class="card">
             <h2 class="h-ico"><i data-i="target"></i> Cibles</h2>
-            <div class="field"><label>Hashtags de ta niche</label><textarea id="al-hashtags" rows="2" placeholder="#coachsportif, #fitnessfrance, #nutritionsaine"></textarea>
+            <div class="field"><label>Hashtags de ta niche</label><textarea id="al-hashtags" rows="2" placeholder="#coachsportif, #fitnessfrance, #nutritionsaine (séparés par des virgules)"></textarea>
               <small>Les auteurs des posts récents et populaires de ces hashtags seront likés. Un hashtag ne contient pas d’espace.</small></div>
             <div class="field"><label>Comptes concurrents</label><textarea id="al-competitors" rows="2" placeholder="@concurrent1, @concurrent2"></textarea>
               <small>Le dernier post de leurs abonnés sera liké (1 like par personne).</small></div>

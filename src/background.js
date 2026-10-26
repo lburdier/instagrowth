@@ -364,16 +364,26 @@ async function runLeadSearch({ source, query, max = 30, filters = {} }) {
   try {
     let candidates = [];
     let label = source;
+    // Plusieurs hashtags ou concurrents possibles, séparés par des virgules (ou des espaces).
+    const targets = query.split(/[,\s]+/).map((t) => t.trim().replace(/^[#@]/, '')).filter(Boolean);
+    const seen = new Set();
     if (source === 'hashtag') {
-      const { media } = await ig.hashtagMedia(query);
-      const seen = new Set();
-      for (const m of media) if (m.user && !seen.has(m.user.pk)) { seen.add(m.user.pk); candidates.push(m.user); }
-      label = `#${query.replace(/^#/, '')}`;
+      for (const tag of targets) {
+        const { media } = await ig.hashtagMedia(tag).catch((e) => { job.last = e.message; return { media: [] }; });
+        for (const m of media) if (m.user && !seen.has(m.user.pk)) { seen.add(m.user.pk); candidates.push({ ...m.user, _src: `#${tag}` }); }
+        await save({ total: candidates.length, last: `#${tag} : ${media.length} publications lues` });
+      }
+      label = targets.map((t) => `#${t}`).join(', ');
     } else if (source === 'competitor') {
-      const p = await ig.profileByUsername(query.replace(/^@/, ''));
-      if (p.isPrivate && !p.followedByViewer) throw new IgError('Compte privé : impossible de lister ses abonnés.');
-      candidates = await ig.followers(p.pk, { max: Math.min(200, max * 4) });
-      label = `abonnés @${p.username}`;
+      const per = Math.max(30, Math.ceil(Math.min(200, max * 4) / targets.length));
+      for (const name of targets) {
+        const p = await ig.profileByUsername(name);
+        if (p.isPrivate && !p.followedByViewer) { await save({ last: `@${p.username} est privé : abonnés inaccessibles` }); continue; }
+        for (const u of await ig.followers(p.pk, { max: per })) if (!seen.has(u.pk)) { seen.add(u.pk); candidates.push({ ...u, _src: `abonnés @${p.username}` }); }
+        await save({ total: candidates.length, last: `@${p.username} : abonnés lus` });
+      }
+      if (!candidates.length) throw new IgError('Aucun abonné accessible (comptes privés ou introuvables).');
+      label = targets.map((t) => `@${t}`).join(', ');
     } else if (source === 'likers') {
       const pk = await ig.mediaPkFromUrl(query);
       candidates = await ig.likers(pk);
@@ -400,7 +410,7 @@ async function runLeadSearch({ source, query, max = 30, filters = {} }) {
       }
       const reason = matchesFilters(full, filters);
       if (reason) { await save({ last: `@${full.username} ignoré (${reason})` }); continue; }
-      await upsertLead(leadFromUser(full, label));
+      await upsertLead(leadFromUser(full, c._src || label));
       job.found++;
       await save({ last: `@${full.username} ajouté` });
     }
@@ -447,12 +457,20 @@ function pauseFor(st, err) {
   notify('autolike-pause', 'Auto-like en pause', `${err.message} — reprise automatique dans ${Math.round(ms / 60000)} min.`);
 }
 
-async function refillQueue(cfg, st) {
-  const sources = [
-    ...cfg.hashtags.map((h) => ({ type: 'hashtag', value: h })),
-    ...cfg.competitors.map((c) => ({ type: 'competitor', value: c })),
-    ...(cfg.prospects?.length ? [{ type: 'prospects', value: cfg.prospects }] : []),
+function autolikeSources(cfg) {
+  return [
+    ...cfg.hashtags.map((h) => ({ type: 'hashtag', value: h, key: `h:${h}` })),
+    ...cfg.competitors.map((c) => ({ type: 'competitor', value: c, key: `c:${c}` })),
+    // La clé change avec la liste : ajouter des prospects relance aussitôt la source.
+    ...(cfg.prospects?.length ? [{ type: 'prospects', value: cfg.prospects, key: `p:${cfg.prospects.join(',')}` }] : []),
   ];
+}
+
+// Une source sans nouveau compte est « épuisée » pendant 6 h (les hashtags se renouvellent).
+const EXHAUSTED_MS = 6 * 3600e3;
+
+async function refillQueue(cfg, st) {
+  const sources = autolikeSources(cfg);
   if (!sources.length) { st.status = 'Aucune source configurée'; st.state = 'nosource'; return; }
   const src = sources[st.sourceIdx % sources.length];
   st.sourceIdx++;
@@ -488,7 +506,16 @@ async function refillQueue(cfg, st) {
   fresh.sort(() => Math.random() - 0.5);
   st.queue = [...st.queue, ...fresh].slice(0, 150);
   const label = src.type === 'prospects' ? 'la liste de prospects' : src.type === 'hashtag' ? '#' + src.value.replace(/^#/, '') : '@' + src.value.replace(/^@/, '');
-  alLog(st, 'info', `${fresh.length} cibles ajoutées depuis ${label}`);
+  st.exhausted ||= {};
+  if (fresh.length) delete st.exhausted[src.key];
+  else st.exhausted[src.key] = Date.now();
+  alLog(st, fresh.length ? 'info' : 'skip', fresh.length ? `${fresh.length} cibles ajoutées depuis ${label}` : `Plus de nouveau compte à liker dans ${label}`);
+}
+
+/** Toutes les sources configurées sont-elles épuisées (et la file vide) ? */
+function allSourcesExhausted(cfg, st) {
+  const keys = autolikeSources(cfg).map((s) => s.key);
+  return !st.queue.length && keys.length > 0 && keys.every((k) => (st.exhausted?.[k] || 0) > Date.now() - EXHAUSTED_MS);
 }
 
 // ---------------------------------------------------------------------------
@@ -734,6 +761,21 @@ async function autolikeTick(force = false) {
       if (e instanceof IgError && ['rate', 'feedback', 'checkpoint', 'auth'].includes(e.kind)) { pauseFor(st, e); st.state = 'paused'; }
       else { alLog(st, 'error', e.message); st.nextActionAt = Date.now() + 5 * 60_000; }
       st.lastResult = e.message;
+    }
+
+    if (st.state !== 'paused' && allSourcesExhausted(cfg, st)) {
+      const onlyProspects = !cfg.hashtags.length && !cfg.competitors.length;
+      st.state = 'exhausted';
+      st.status = onlyProspects
+        ? 'Tous tes prospects ont été likés : ajoute de nouveaux comptes à ta liste.'
+        : 'Plus de nouveau compte à liker : ajoute des hashtags, des concurrents ou des prospects.';
+      st.lastResult = st.status;
+      if (!st.exhaustedNotifiedAt || Date.now() - st.exhaustedNotifiedAt > 24 * 3600e3) {
+        st.exhaustedNotifiedAt = Date.now();
+        notify('autolike-exhausted', 'Auto-like : ajoute de nouveaux comptes', st.status);
+      }
+    } else if (st.state === 'exhausted' && st.queue.length) {
+      st.state = 'waiting';
     }
 
     // Nettoyage : on garde 30 jours d'utilisateurs déjà touchés et d'historique.

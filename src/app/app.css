@@ -473,3 +473,14 @@ a.btn.icon-btn:hover { background: var(--hover); }
 
 .logout-item { padding: 10px 12px; border-radius: 10px; background: var(--bg); margin-bottom: 6px; font-size: 13px; }
 .phone-note { box-shadow: inset 3px 0 0 var(--mid); }
+
+/* Mini-tutoriels */
+details.tuto { margin-bottom: 16px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+details.tuto summary { display: flex; align-items: center; gap: 8px; padding: 12px 16px; cursor: pointer; font-weight: 600; list-style: none; color: var(--accent); }
+details.tuto summary::-webkit-details-marker { display: none; }
+details.tuto summary .muted { font-weight: 400; margin-left: 4px; }
+details.tuto summary::after { content: '›'; margin-left: auto; color: var(--muted); transition: transform .15s; font-size: 18px; }
+details.tuto[open] summary::after { transform: rotate(90deg); }
+details.tuto ol { margin: 0; padding: 0 16px 4px 38px; line-height: 21px; }
+details.tuto li { margin-bottom: 6px; }
+details.tuto .tuto-tip { margin: 4px 16px 14px; padding: 8px 12px; border-radius: 8px; background: var(--bg); font-size: 13px; }

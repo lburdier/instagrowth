@@ -1,6 +1,7 @@
 // Vue Statistiques : KPIs, croissance, meilleurs créneaux, top posts, revue IA.
 
 import { send, busy, $ } from '../ui.js';
+import { TUTOS } from '../tutorial.js';
 import { computeStats, localInsights, statsForAi, erBenchmark } from '../../lib/stats.js';
 import { complete } from '../../lib/ai.js';
 import { barChart, lineChart } from '../charts.js';
@@ -298,6 +299,7 @@ export default {
         </div>
       </div>
       <div class="row" id="dash-recent" style="margin:-10px 0 18px;gap:6px"></div>
+      ${TUTOS.dashboard()}
       <div id="dash-body"></div>`;
     $('#dash-form', el).onsubmit = (e) => { e.preventDefault(); load($('#dash-user', el).value.trim().replace(/^@/, '')); };
     $('#dash-post', el).onclick = () => openPostInsight();

@@ -2,6 +2,7 @@
 // scoring IA, messages d'approche IA, export CSV.
 
 import { send, busy, toast, $, $$, navigate, activeAccountId } from '../ui.js';
+import { TUTOS } from '../tutorial.js';
 import { db } from '../../lib/db.js';
 import { complete } from '../../lib/ai.js';
 import { escapeHtml, fmtNum, fmtDate, toCsv, downloadText } from '../../lib/util.js';
@@ -19,8 +20,8 @@ export const STATUSES = {
 };
 
 const SOURCES = {
-  hashtag: { label: 'Hashtag', ph: 'ex. coachsportif', help: 'Récupère les auteurs des posts récents et populaires du hashtag.' },
-  competitor: { label: 'Abonnés concurrent', ph: '@compte_concurrent', help: 'Récupère les abonnés d’un compte public de ta niche : ton audience idéale.' },
+  hashtag: { label: 'Hashtag', ph: 'ex. coachsportif, fitnessfrance, nutrition', help: 'Récupère les auteurs des publications récentes et populaires de ces hashtags. Tu peux en mettre plusieurs, séparés par des virgules.' },
+  competitor: { label: 'Abonnés concurrent', ph: '@concurrent1, @concurrent2', help: 'Récupère les abonnés de comptes publics de ta niche : ton audience idéale. Plusieurs comptes possibles, séparés par des virgules.' },
   likers: { label: 'Likers d’un post', ph: 'https://www.instagram.com/p/…', help: 'Récupère les personnes qui ont liké un post précis (le tien ou un concurrent).' },
   usernames: { label: 'Import', ph: '@user1, @user2, @user3', help: 'Colle une liste de noms d’utilisateur à enrichir.' },
 };
@@ -212,6 +213,7 @@ export default {
       <div class="view-head">
         <div><h1>Leads</h1><p class="muted">Trouve des prospects qualifiés, score-les avec l’IA et suis-les jusqu’à la conversion.</p></div>
       </div>
+      ${TUTOS.leads()}
       <div class="grid g4" id="lead-counts" style="margin-bottom:16px"></div>
 
       <div class="card" style="margin-bottom:16px">

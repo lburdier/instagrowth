@@ -85,6 +85,8 @@ Dans `chrome://extensions`, clique sur **Supprimer** sur la carte InstaGrowth. T
 4. Remplis ton **profil de marque** (niche, audience, ton, offre) : l'IA s'en sert pour toutes ses suggestions.
 5. Sur ton profil Instagram, clique sur le bouton bleu **InstaGrowth**.
 
+Chaque écran commence par un encart **« Comment ça marche ? »** : un mini-tuto de 3 ou 4 étapes. Replie-le quand tu n'en as plus besoin ; il reste replié.
+
 ---
 
 ## Visite guidée
@@ -149,6 +151,7 @@ L'auto-like like chaque jour des publications de ton audience cible (hashtags de
 
 - **Vue d'ensemble** : likes du jour face à la limite, statut en direct, prochain like, file d'attente, historique sur 14 jours, derniers comptes likés. Le bouton **Liker maintenant** lance un passage immédiat.
 - **Chaque like est réel et vérifié** : il n'est compté que si Instagram le confirme.
+- **Quand tous les comptes disponibles ont été likés**, un message et une notification te demandent d'ajouter de nouveaux hashtags, concurrents ou prospects. Le bouton **Ajouter des comptes** t'emmène directement au bon endroit.
 - Option **Notification à chaque like** : notification du système, ou petite bulle dans Instagram.
 
 <img src="docs/screenshots/autolike-settings.png" alt="Réglages de l'auto-like : cibles, liste de prospects, limites" width="900">
@@ -185,7 +188,7 @@ Chaque règle a sa fréquence, son nombre maximum par passage, un bouton **Lance
 
 <img src="docs/screenshots/leads.png" alt="Recherche de leads et mini-CRM" width="900">
 
-- **Trouver des leads** : par hashtag, parmi les abonnés d'un concurrent, les personnes qui ont liké une publication, ou en important une liste. Filtres sur les abonnés, les mots-clés de la bio, les comptes pro et la présence d'un email ou d'un téléphone.
+- **Trouver des leads** : par hashtags ou parmi les abonnés de concurrents (**plusieurs à la fois, séparés par des virgules**), parmi les personnes qui ont liké une publication, ou en important une liste. Filtres sur les abonnés, les mots-clés de la bio, les comptes pro et la présence d'un email ou d'un téléphone.
 - **Ajouter un lead** à la main : un @compte (ou le lien de son profil), avec en option nom, email, téléphone, statut et note. Le reste (photo, abonnés, bio) est récupéré automatiquement.
 - **Bio et contacts** : récupérés automatiquement, en arrière-plan, pour les leads qui n'en ont pas encore. Le bouton **Compléter les infos** lance la récupération tout de suite.
 - **Mini-CRM** : filtres par statut avec compteurs (Nouveau, Liké, Chaud, Contacté, A répondu, Gagné, Perdu), tri, **score IA** sur 100 en couleur, icônes de contact (email, téléphone, site), notes, actions groupées sur la sélection, export CSV.
