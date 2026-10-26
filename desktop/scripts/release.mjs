@@ -1,7 +1,7 @@
 // Publie la version courante sur GitHub (release « desktop-vX.Y.Z », non marquée
 // « Latest » pour ne pas masquer les releases de l'extension). Les apps installées
 // la verront à leur prochaine vérification et proposeront la mise à jour.
-//   1. monte "version" dans package.json   2. npm run dist   3. npm run release -- "Notes de version"
+//   1. monte "version" dans package.json et commite   2. npm run dist   3. git push   4. npm run release -- "Notes de version"
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -24,6 +24,8 @@ if (!yml.includes(`version: ${version}`)) {
   process.exit(1);
 }
 const tag = `desktop-v${version}`;
+// Le tag pointe sur le commit courant (qui doit déjà être poussé), pas sur la branche par défaut.
+const sha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 const notes = process.argv.slice(2).join(' ') || `InstaGrowth Desktop ${version}`;
-execFileSync('gh', ['release', 'create', tag, ...files, '--repo', 'lburdier/instagrowth', '--title', `${build.productName} ${version}`, '--notes', notes, '--latest=false'], { stdio: 'inherit' });
+execFileSync('gh', ['release', 'create', tag, ...files, '--repo', 'lburdier/instagrowth', '--title', `${build.productName} ${version}`, '--notes', notes, '--target', sha, '--latest=false'], { stdio: 'inherit' });
 console.log(`Release ${tag} publiée.`);

@@ -89,8 +89,8 @@ Rien ne se télécharge ni ne s'installe sans ton clic. « Plus tard » masque l
 
 Les versions de l'app desktop sont publiées dans les releases GitHub du dépôt sous le tag `desktop-vX.Y.Z`. Les releases `vX.Y.Z` sont celles de l'extension, et l'app les ignore. Pour publier une nouvelle version :
 
-1. Monte `"version"` dans `desktop/package.json` (par exemple `0.2.0`).
-2. Lance `npm run dist`.
+1. Monte `"version"` dans `desktop/package.json` (par exemple `0.2.0`), puis commite.
+2. Lance `npm run dist`, puis pousse la branche (`git push`) : le tag de la release pointera sur ce commit.
 3. Lance `npm run release -- "Nouveautés de la version"`. Il faut le CLI `gh` connecté à GitHub. La commande crée la release `desktop-v0.2.0`, sans la marquer « Latest », avec l'installeur, son `.blockmap` et `latest.yml`.
 
 Les apps déjà installées proposeront la mise à jour à leur prochaine vérification.
