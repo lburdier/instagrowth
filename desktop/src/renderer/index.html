@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'none'">
+  <title>InstaGrowth Desktop</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="../../assets/icon.png" alt="">
+      <div><strong>InstaGrowth</strong><small class="muted">Desktop · téléphone USB</small></div>
+    </div>
+    <nav id="nav">
+      <a data-view="device" class="active"><i data-i="usb" data-s="22"></i><span>Appareil</span></a>
+      <a data-view="bot"><i data-i="heart" data-s="22"></i><span>Bot</span></a>
+      <a data-view="agent"><i data-i="sparkle" data-s="22"></i><span>Agent Claude</span></a>
+      <a data-view="limits"><i data-i="shield" data-s="22"></i><span>Limites</span></a>
+      <a data-view="journal"><i data-i="note" data-s="22"></i><span>Journal</span></a>
+      <a data-view="settings"><i data-i="settings" data-s="22"></i><span>Réglages</span></a>
+    </nav>
+    <div class="side-foot">
+      <div class="chip-device" id="deviceChip"><span class="dot"></span><span class="txt">Recherche…</span></div>
+      <button class="btn danger big" id="stopBtn" title="Interrompt tout de suite l’action, l’attente et l’appel IA en cours">
+        <i data-i="stop" data-s="18"></i>Arrêt immédiat
+      </button>
+      <small class="muted center">Raccourci global : <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>X</kbd></small>
+    </div>
+  </aside>
+
+  <main>
+    <div class="taskbar" id="taskbar" hidden>
+      <span class="spinner"></span>
+      <span id="taskName"></span>
+      <span class="muted" id="taskWait"></span>
+      <span class="spacer"></span>
+      <button class="btn small danger-soft" data-action="stop"><i data-i="stop" data-s="14"></i>Arrêter</button>
+    </div>
+
+    <div class="pending" id="pendingDm" hidden>
+      <i data-i="message" data-s="22"></i>
+      <div class="grow">
+        <strong>Message prêt pour <span id="pdUser"></span> — pas encore envoyé</strong>
+        <p class="pd-text" id="pdText"></p>
+        <small class="muted">Vérifie l’écran du téléphone à droite. Rien ne part sans ton clic, puis ta confirmation.</small>
+      </div>
+      <div class="col">
+        <button class="btn primary" id="pdSend"><i data-i="send" data-s="16"></i>Envoyer…</button>
+        <button class="btn" id="pdCancel">Annuler</button>
+      </div>
+    </div>
+
+    <!-- APPAREIL -->
+    <section class="view active" data-view="device">
+      <div class="view-head">
+        <div><h1>Appareil</h1><p class="muted">Branche ton téléphone Android en USB : l’app pilote Instagram à travers le débogage USB (ADB).</p></div>
+        <button class="btn" data-action="refresh"><i data-i="refresh" data-s="16"></i>Actualiser</button>
+      </div>
+      <details class="tuto" data-tuto="device" open>
+        <summary><i data-i="sparkle" data-s="16"></i><span>Comment ça marche ? <span class="muted">activer le débogage USB en 5 étapes</span></span></summary>
+        <ol>
+          <li>Sur le téléphone : <strong>Paramètres → À propos du téléphone</strong>, puis touche <strong>7 fois « Numéro de build »</strong> pour activer les options pour les développeurs.</li>
+          <li><strong>Paramètres → Système → Options pour les développeurs</strong> : active <strong>Débogage USB</strong>. Sur Xiaomi, active aussi <strong>Débogage USB (paramètres de sécurité)</strong>, sinon les taps sont ignorés.</li>
+          <li>Branche le câble USB (un câble de données, pas seulement de charge) et choisis <strong>Transfert de fichiers</strong> si le téléphone le demande.</li>
+          <li>Sur le téléphone, accepte <strong>« Autoriser le débogage USB ? »</strong> et coche <strong>Toujours autoriser depuis cet ordinateur</strong>.</li>
+          <li>Ouvre Instagram, connecte-toi à ton compte et laisse l’écran déverrouillé pendant que le bot travaille.</li>
+        </ol>
+        <p class="tuto-tip"><strong>Astuce :</strong> pas de téléphone sous la main ? Active la <strong>simulation</strong> ci-dessous pour tout essayer sans risque.</p>
+      </details>
+
+      <div class="grid g2">
+        <div class="card">
+          <h2 class="h-ico"><i data-i="cpu" data-s="18"></i>ADB (platform-tools)</h2>
+          <div id="adbBox"></div>
+        </div>
+        <div class="card">
+          <h2 class="h-ico"><i data-i="phone" data-s="18"></i>Téléphones détectés</h2>
+          <div id="devicesBox"></div>
+        </div>
+        <div class="card">
+          <h2 class="h-ico"><i data-i="info" data-s="18"></i>Appareil actif</h2>
+          <div id="infoBox"></div>
+        </div>
+        <div class="card">
+          <h2 class="h-ico"><i data-i="monitor" data-s="18"></i>Simulation</h2>
+          <p class="muted">Un faux Instagram dans un téléphone virtuel. Rien n’est envoyé à Instagram, et les compteurs sont séparés de ceux du vrai compte.</p>
+          <label class="switch-row"><span>Utiliser le téléphone simulé</span><input type="checkbox" id="simToggle" class="switch"></label>
+          <div class="row">
+            <label class="field small">Simuler un blocage après
+              <select id="simBlock"><option value="0">jamais</option><option value="3">3 likes</option><option value="8">8 likes</option></select>
+            </label>
+            <label class="field small">Likes qui ne prennent pas
+              <select id="simMiss"><option value="0">aucun</option><option value="0.3">30 %</option><option value="1">tous</option></select>
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- BOT -->
+    <section class="view" data-view="bot">
+      <div class="view-head">
+        <div><h1>Bot</h1><p class="muted">Des actions réelles dans l’app Instagram du téléphone, chacune vérifiée sur l’écran.</p></div>
+      </div>
+      <details class="tuto" data-tuto="bot" open>
+        <summary><i data-i="sparkle" data-s="16"></i><span>Comment ça marche ? <span class="muted">profil, likes et messages</span></span></summary>
+        <ol>
+          <li><strong>Profil</strong> : tape un <code>@compte</code>, puis <strong>Lire la bio</strong>. Le bot ouvre le profil sur le téléphone et lit nom, bio, lien et compteurs.</li>
+          <li><strong>Session de likes</strong> : mets des <code>#hashtags</code> et/ou des <code>@comptes</code> séparés par des virgules, choisis un nombre, puis <strong>Lancer</strong>. Un like n’est compté que si le cœur passe au rouge à l’écran.</li>
+          <li><strong>Message privé</strong> : le bot ouvre la conversation et tape le texte, sans l’envoyer. Tu relis sur le téléphone, puis tu confirmes l’envoi.</li>
+        </ol>
+        <p class="tuto-tip"><strong>Astuce :</strong> le bouton rouge <strong>Arrêt immédiat</strong> coupe tout, à tout moment, même pendant une attente.</p>
+      </details>
+
+      <div class="notice">
+        <i data-i="alert" data-s="20"></i>
+        <div><strong>Le débogage USB ne donne pas plus de marge.</strong> Instagram compte les likes, les abonnements et les DM sur ses serveurs, par compte, quel que soit l’appareil. Piloter la vraie app paraît plus naturel qu’un robot web, mais un rythme trop rapide mène quand même à des « Réessayez plus tard », puis à des blocages plus longs. Les limites de l’onglet <a data-goto="limits">Limites</a> s’appliquent donc aussi ici.</div>
+      </div>
+
+      <div class="grid g2">
+        <div class="card">
+          <h2 class="h-ico"><i data-i="user" data-s="18"></i>Profil</h2>
+          <div class="row">
+            <input id="profUser" class="grow" placeholder="@compte" autocomplete="off">
+            <button class="btn" id="profOpen">Ouvrir</button>
+            <button class="btn primary" id="profRead">Lire la bio</button>
+          </div>
+          <div id="profOut" class="profile-out"></div>
+        </div>
+
+        <div class="card">
+          <h2 class="h-ico"><i data-i="heart" data-s="18"></i>Session de likes</h2>
+          <label class="field">Cibles (hashtags et comptes, séparés par des virgules)
+            <textarea id="likeTargets" rows="2" placeholder="#yoga, #meditation, @studio.lumen"></textarea>
+          </label>
+          <div class="row">
+            <label class="field small">Nombre de likes <input id="likeCount" type="number" min="1" max="200" value="10"></label>
+            <div class="spacer"></div>
+            <button class="btn primary" id="likeStart"><i data-i="play" data-s="14"></i>Lancer</button>
+          </div>
+          <div class="progress" id="likeProg" hidden><div class="bar"><span></span></div><small class="muted"></small></div>
+          <small class="muted" id="likeHint"></small>
+        </div>
+
+        <div class="card span2">
+          <h2 class="h-ico"><i data-i="message" data-s="18"></i>Message privé (préparé, jamais envoyé seul)</h2>
+          <div class="row">
+            <input id="dmUser" placeholder="@compte" autocomplete="off">
+            <span class="spacer"></span>
+            <small class="muted" id="dmKbd"></small>
+          </div>
+          <textarea id="dmText" rows="3" placeholder="Ton message, personnalisé pour cette personne."></textarea>
+          <div class="row">
+            <span class="spacer"></span>
+            <button class="btn primary" id="dmPrepare"><i data-i="type" data-s="16"></i>Préparer dans le téléphone</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- AGENT -->
+    <section class="view" data-view="agent">
+      <div class="view-head">
+        <div><h1>Agent Claude</h1><p class="muted">Claude voit l’écran du téléphone et choisit lui-même les gestes, dans le respect de tes limites.</p></div>
+        <span class="pill" id="aiPill"></span>
+      </div>
+      <details class="tuto" data-tuto="agent" open>
+        <summary><i data-i="sparkle" data-s="16"></i><span>Comment ça marche ? <span class="muted">confier une mission à Claude</span></span></summary>
+        <ol>
+          <li>Dans <a data-goto="settings">Réglages</a>, colle ta clé <code>sk-ant-…</code> ou connecte OpenRouter. Le modèle par défaut est <strong>Claude Opus 5.5</strong>.</li>
+          <li>Décris la mission en une phrase, par exemple « like 5 posts récents de #yoga » ou « lis la bio de @studio.lumen et prépare-lui un message ».</li>
+          <li>À chaque étape, Claude reçoit une capture de l’écran et la liste des éléments, puis choisit une action : toucher, faire défiler, taper, revenir…</li>
+          <li>Les likes passent par les mêmes limites et la même vérification que le bot. Les messages restent préparés : l’envoi, c’est toi.</li>
+        </ol>
+        <p class="tuto-tip"><strong>Astuce :</strong> chaque étape coûte quelques milliers de jetons (capture comprise). Le compteur sous le journal affiche la consommation.</p>
+      </details>
+
+      <div class="card">
+        <label class="field">Mission
+          <textarea id="agentGoal" rows="3" placeholder="Ex. : Like 5 publications récentes de #yoga, puis lis la bio de @studio.lumen."></textarea>
+        </label>
+        <div class="chips" id="agentExamples">
+          <button class="chip" data-goal="Like 5 publications récentes du hashtag #yoga.">Liker 5 posts de #yoga</button>
+          <button class="chip" data-goal="Ouvre le profil de @studio.lumen, lis sa bio et résume-la-moi en deux phrases.">Résumer une bio</button>
+          <button class="chip" data-goal="Lis la bio de @atelier.noa puis prépare-lui un message d’approche court, sincère et personnalisé (sans l’envoyer).">Préparer un message d’approche</button>
+        </div>
+        <div class="row">
+          <label class="field small">Étapes max <input id="agentSteps" type="number" min="3" max="80" value="25"></label>
+          <span class="spacer"></span>
+          <button class="btn primary" id="agentStart"><i data-i="sparkle" data-s="16"></i>Lancer l’agent</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row between"><h2 class="h-ico"><i data-i="note" data-s="18"></i>Déroulé</h2><small class="muted" id="agentUsage"></small></div>
+        <ol class="steps" id="agentList"></ol>
+        <p class="muted empty" id="agentEmpty">Lance une mission pour voir ici chaque décision de Claude.</p>
+      </div>
+    </section>
+
+    <!-- LIMITES -->
+    <section class="view" data-view="limits">
+      <div class="view-head">
+        <div><h1>Limites prudentes</h1><p class="muted">Les mêmes garde-fous que l’extension, partagés par le bot et par l’agent Claude.</p></div>
+      </div>
+      <details class="tuto" data-tuto="limits" open>
+        <summary><i data-i="sparkle" data-s="16"></i><span>Comment ça marche ? <span class="muted">rythme, plafonds et pauses</span></span></summary>
+        <ol>
+          <li>Choisis un préréglage. <strong>Prudent</strong> est conseillé pour commencer, et la <strong>montée progressive</strong> limite les 7 premiers jours (20, 30, 40… likes).</li>
+          <li>Entre deux likes, l’app attend un délai aléatoire, et fait parfois une « pause café » de 8 à 25 minutes.</li>
+          <li>Si Instagram affiche « Réessayez plus tard », tout s’arrête pendant 24 h (48 h s’il demande une vérification du compte). Après 3 likes non confirmés d’affilée : pause de 2 h.</li>
+        </ol>
+        <p class="tuto-tip"><strong>Astuce :</strong> les plafonds durs (200 likes par jour, 40 par heure, 30 s minimum entre deux likes) ne sont pas réglables.</p>
+      </details>
+      <div class="grid g2">
+        <div class="card">
+          <h2 class="h-ico"><i data-i="clock" data-s="18"></i>Aujourd’hui</h2>
+          <div class="meter"><div class="row between"><span>Likes du jour</span><strong id="mDay"></strong></div><div class="bar"><span id="mDayBar"></span></div></div>
+          <div class="meter"><div class="row between"><span>Cette heure</span><strong id="mHour"></strong></div><div class="bar"><span id="mHourBar"></span></div></div>
+          <div class="meter"><div class="row between"><span>DM envoyés</span><strong id="mDm"></strong></div><div class="bar"><span id="mDmBar"></span></div></div>
+          <div id="pauseBox"></div>
+          <small class="muted" id="limitNote"></small>
+        </div>
+        <div class="card">
+          <h2 class="h-ico"><i data-i="settings" data-s="18"></i>Réglages du rythme</h2>
+          <div class="seg" id="presetSeg">
+            <button data-preset="prudent">Prudent</button><button data-preset="normal">Normal</button><button data-preset="actif">Actif</button>
+          </div>
+          <div class="grid g2 tight">
+            <label class="field small">Likes par jour <input id="lDaily" type="number" min="1" max="200"></label>
+            <label class="field small">Likes par heure <input id="lHourly" type="number" min="1" max="40"></label>
+            <label class="field small">Délai min (s) <input id="lMin" type="number" min="30"></label>
+            <label class="field small">Délai max (s) <input id="lMax" type="number" min="40"></label>
+            <label class="field small">Actif à partir de (h) <input id="lStart" type="number" min="0" max="23"></label>
+            <label class="field small">Jusqu’à (h) <input id="lEnd" type="number" min="1" max="24"></label>
+          </div>
+          <label class="switch-row"><span>Montée progressive (7 premiers jours)</span><input type="checkbox" id="lWarm" class="switch"></label>
+          <div class="row"><span class="spacer"></span><button class="btn primary" id="limitsSave"><i data-i="check" data-s="16"></i>Enregistrer</button></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- JOURNAL -->
+    <section class="view" data-view="journal">
+      <div class="view-head">
+        <div><h1>Journal</h1><p class="muted">Tout ce que le bot et Claude ont fait, avec les likes vérifiés.</p></div>
+        <button class="btn" id="logClear"><i data-i="trash" data-s="16"></i>Vider l’affichage</button>
+      </div>
+      <div class="grid g2">
+        <div class="card"><h2 class="h-ico"><i data-i="note" data-s="18"></i>Activité</h2><ul class="log" id="log"></ul></div>
+        <div class="card"><h2 class="h-ico"><i data-i="heart" data-s="18"></i>Likes vérifiés</h2><ul class="likes" id="likesList"></ul></div>
+      </div>
+    </section>
+
+    <!-- RÉGLAGES -->
+    <section class="view" data-view="settings">
+      <div class="view-head">
+        <div><h1>Réglages</h1><p class="muted">IA, outils Android et données.</p></div>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <h2 class="h-ico"><i data-i="sparkle" data-s="18"></i>Intelligence artificielle</h2>
+          <div class="seg" id="providerSeg"><button data-provider="anthropic">Claude (clé API)</button><button data-provider="openrouter">OpenRouter</button></div>
+          <div id="provAnthropic">
+            <label class="field">Clé API Claude <input id="antKey" type="password" placeholder="sk-ant-…" autocomplete="off"></label>
+            <div class="grid g2 tight">
+              <label class="field small">Modèle <select id="antModel"></select></label>
+              <label class="field small">Effort <select id="antEffort"><option value="low">Faible (rapide)</option><option value="medium">Moyen (conseillé)</option><option value="high">Élevé</option></select></label>
+            </div>
+            <small class="muted">La clé reste sur ce PC, chiffrée par Windows. Crée-la sur <a data-href="https://platform.claude.com/settings/keys">platform.claude.com</a>.</small>
+          </div>
+          <div id="provOpenrouter" hidden>
+            <div class="row"><button class="btn" id="orConnect"><i data-i="link" data-s="16"></i>Se connecter avec OpenRouter</button><small class="muted">ou colle une clé :</small></div>
+            <label class="field">Clé OpenRouter <input id="orKey" type="password" placeholder="sk-or-…" autocomplete="off"></label>
+            <label class="field">Modèle (doit accepter les images et les outils)
+              <div class="row"><input id="orModel" class="grow" list="orModels" placeholder="anthropic/claude-opus-5.5"><button class="btn small" id="orList">Lister</button></div>
+              <datalist id="orModels"></datalist>
+            </label>
+          </div>
+          <div class="row">
+            <label class="field small">Étapes max par mission <input id="aiSteps" type="number" min="3" max="80"></label>
+            <span class="spacer"></span>
+            <button class="btn" id="aiTest">Tester</button>
+            <button class="btn primary" id="aiSave"><i data-i="check" data-s="16"></i>Enregistrer</button>
+          </div>
+          <small id="aiMsg" class="muted"></small>
+        </div>
+        <div class="card">
+          <h2 class="h-ico"><i data-i="cpu" data-s="18"></i>Outils Android</h2>
+          <label class="field">Chemin de adb.exe (vide = détection automatique) <input id="adbPath" placeholder="C:\platform-tools\adb.exe"></label>
+          <label class="field">Chemin de scrcpy.exe (facultatif, miroir en direct) <input id="scrcpyPath" placeholder="C:\scrcpy\scrcpy.exe"></label>
+          <div class="row"><span class="spacer"></span><button class="btn primary" id="toolsSave"><i data-i="check" data-s="16"></i>Enregistrer</button></div>
+          <h3 class="mt">Données</h3>
+          <p class="muted">Réglages, compteurs de limites et historique des likes sont stockés localement.</p>
+          <button class="btn" id="openData"><i data-i="folder" data-s="16"></i>Ouvrir le dossier des données</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <aside class="phone-panel">
+    <div class="phone-head">
+      <strong id="phoneTitle">Écran du téléphone</strong>
+      <span class="spacer"></span>
+      <label class="mini-toggle" title="Rafraîchir l’aperçu en continu"><input type="checkbox" id="liveToggle" checked><i data-i="eye" data-s="16"></i></label>
+      <label class="mini-toggle" title="Contrôle manuel : un clic sur l’écran = un tap sur le téléphone"><input type="checkbox" id="manualToggle"><i data-i="hand" data-s="16"></i></label>
+    </div>
+    <div class="phone">
+      <div class="phone-screen" id="screen">
+        <img id="screenImg" alt="" draggable="false">
+        <div class="screen-empty" id="screenEmpty"><i data-i="usb" data-s="40"></i><strong>Aucun appareil</strong><span>Branche ton téléphone en USB avec le débogage activé, ou active la simulation.</span></div>
+      </div>
+    </div>
+    <div class="phone-controls">
+      <button class="icon-btn" data-manual="back" title="Retour"><i data-i="back" data-s="18"></i></button>
+      <button class="icon-btn" data-manual="home" title="Accueil"><i data-i="home" data-s="18"></i></button>
+      <button class="icon-btn" data-manual="launch" title="Ouvrir Instagram"><i data-i="play" data-s="16"></i></button>
+      <button class="icon-btn" data-manual="wake" title="Allumer l’écran"><i data-i="power" data-s="18"></i></button>
+      <button class="icon-btn" id="scrcpyBtn" title="Miroir en direct (scrcpy)"><i data-i="external" data-s="18"></i></button>
+    </div>
+    <small class="muted center" id="screenNote"></small>
+  </aside>
+
+  <div class="toasts" id="toasts"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

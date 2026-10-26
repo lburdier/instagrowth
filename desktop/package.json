@@ -1,0 +1,22 @@
+{
+  "name": "instagrowth-desktop",
+  "productName": "InstaGrowth Desktop",
+  "version": "0.1.0",
+  "description": "Pilote l'app Instagram d'un téléphone Android branché en USB (ADB) : likes vérifiés, lecture de bio, DM préparés et agent Claude.",
+  "type": "module",
+  "main": "src/main/main.js",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "sim": "electron . --sim",
+    "selftest": "node scripts/selftest.mjs",
+    "mock": "node scripts/mock-claude.mjs 4810"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.132.1"
+  },
+  "devDependencies": {
+    "electron": "44.9.3"
+  }
+}
