@@ -128,6 +128,8 @@ export default {
   },
   show([username]) {
     renderPending();
-    if (username) phone.go(`https://ig.me/m/${encodeURIComponent(username)}`);
+    // Route directe d'Instagram (celle vers laquelle redirige ig.me) : ig.me affiche une
+    // page d'erreur Meta dès que le User-Agent n'est pas celui d'un mobile.
+    if (username) phone.go(`/m/${encodeURIComponent(username.replace(/^@/, ''))}/`);
   },
 };
