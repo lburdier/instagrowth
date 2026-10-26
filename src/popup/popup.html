@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>InstaGrowth</title>
+  <link rel="stylesheet" href="../app/app.css" />
+  <style>
+    body { display: block; width: 340px; padding: 14px; }
+    .head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .head img { width: 30px; height: 30px; border-radius: 8px; }
+    .acts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+    .card { padding: 12px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="head"><img src="../../icons/icon48.png" alt=""><strong style="flex:1">InstaGrowth</strong><button class="sm icon-btn" data-hash="settings" title="Réglages"><i data-i="settings"></i></button></div>
+  <div class="card" id="acc"></div>
+  <div class="card">
+    <div class="row between"><strong class="row" style="gap:6px"><i data-i="heart"></i> Auto-like</strong><label class="switch"><input type="checkbox" id="al"><span></span></label></div>
+    <div id="al-info" class="muted" style="margin-top:6px;font-size:12px"></div>
+  </div>
+  <div class="card" id="next-post"></div>
+  <div class="acts">
+    <button class="primary" data-hash="publisher"><i data-i="calendar"></i> Publier</button>
+    <button data-hash="messages"><i data-i="message"></i> Messages</button>
+    <button data-hash="dashboard"><i data-i="chart"></i> Stats</button>
+    <button data-hash="leads"><i data-i="target"></i> Leads</button>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

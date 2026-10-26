@@ -1,0 +1,120 @@
+{
+  "manifest_version": 3,
+  "name": "InstaGrowth — Instagram Pro Toolkit",
+  "short_name": "InstaGrowth",
+  "version": "0.4.0",
+  "description": "Instagram sur desktop : DM, publication avancée, programmation, stats, génération de leads, auto-like prudent et IA (Claude, OpenRouter…).",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "InstaGrowth",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "permissions": [
+    "storage",
+    "unlimitedStorage",
+    "alarms",
+    "cookies",
+    "notifications",
+    "identity",
+    "tabs",
+    "declarativeNetRequestWithHostAccess",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://*.instagram.com/*",
+    "https://*.cdninstagram.com/*",
+    "https://*.fbcdn.net/*",
+    "https://ig.me/*",
+    "https://api.anthropic.com/*",
+    "https://openrouter.ai/*",
+    "https://platform.claude.com/*",
+    "https://console.anthropic.com/*"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "src/content/ig-capture.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "src/content/ig-mobile.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "src/content/ig-ui.js"
+      ],
+      "css": [
+        "src/content/ig-ui.css"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": [
+        "https://platform.claude.com/*",
+        "https://console.anthropic.com/*"
+      ],
+      "js": [
+        "src/content/claude-connect.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "icons/*",
+        "src/content/inject/*",
+        "src/lib/*",
+        "src/app/*",
+        "src/app/views/*"
+      ],
+      "matches": [
+        "https://www.instagram.com/*"
+      ]
+    },
+    {
+      "resources": [
+        "icons/*"
+      ],
+      "matches": [
+        "https://platform.claude.com/*",
+        "https://console.anthropic.com/*"
+      ]
+    }
+  ]
+}

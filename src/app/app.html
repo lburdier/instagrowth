@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>InstaGrowth</title>
+  <link rel="icon" href="../../icons/icon32.png" />
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <img src="../../icons/icon48.png" alt="" />
+      <div>
+        <strong>InstaGrowth</strong>
+        <small>Instagram Pro Toolkit</small>
+      </div>
+    </div>
+    <nav id="nav">
+      <a href="#dashboard" data-view="dashboard"><i data-i="chart" data-s="22"></i>Statistiques</a>
+      <a href="#publisher" data-view="publisher"><i data-i="calendar" data-s="22"></i>Publication</a>
+      <a href="#messages" data-view="messages"><i data-i="message" data-s="22"></i>Messages</a>
+      <a href="#leads" data-view="leads"><i data-i="target" data-s="22"></i>Leads</a>
+      <a href="#autolike" data-view="autolike"><i data-i="heart" data-s="22"></i>Auto-like</a>
+      <a href="#mobile" data-view="mobile"><i data-i="phone" data-s="22"></i>Insta mobile</a>
+      <a href="#settings" data-view="settings"><i data-i="settings" data-s="22"></i>Réglages &amp; IA</a>
+    </nav>
+    <div class="account" id="account">
+      <div class="account-pic"></div>
+      <div class="account-meta"><strong>Non connecté</strong><small>Connecte-toi sur instagram.com</small></div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <!-- Les vues sont injectées par app.js -->
+    <section id="view-dashboard" class="view"></section>
+    <section id="view-publisher" class="view"></section>
+    <section id="view-messages" class="view"></section>
+    <section id="view-leads" class="view"></section>
+    <section id="view-autolike" class="view"></section>
+    <section id="view-mobile" class="view"></section>
+    <section id="view-settings" class="view"></section>
+  </main>
+
+  <div id="toasts"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
