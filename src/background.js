@@ -183,11 +183,53 @@ function leadFromUser(u, source, extra = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Comptes : chaque compte Instagram connecté a son propre état (auto-like,
+// relevés, tâches quotidiennes) ; leads et posts sont rattachés à leur compte.
+// ---------------------------------------------------------------------------
+
+let migrating = null;
+
+/** Rattache les données des versions précédentes (non séparées) au dernier compte connu. */
+function migrateLegacy(currentPk) {
+  migrating ||= (async () => {
+    const { migratedAccounts, autolike, snapshots, lastDaily, me } = await chrome.storage.local.get(['migratedAccounts', 'autolike', 'snapshots', 'lastDaily', 'me']);
+    if (migratedAccounts) return;
+    const owner = me?.pk || currentPk;
+    const patch = { migratedAccounts: true };
+    if (autolike) patch[`autolike:${owner}`] = autolike;
+    if (snapshots) patch[`snapshots:${owner}`] = snapshots;
+    if (lastDaily) patch[`lastDaily:${owner}`] = lastDaily;
+    await chrome.storage.local.set(patch);
+    await chrome.storage.local.remove(['autolike', 'snapshots', 'lastDaily']);
+    const leads = (await db.all('leads')).filter((l) => !l.owners);
+    if (leads.length) await db.putMany('leads', leads.map((l) => ({ ...l, owners: [owner] })));
+    const posts = (await db.all('posts')).filter((p) => !p.owner);
+    if (posts.length) await db.putMany('posts', posts.map((p) => ({ ...p, owner })));
+  })().catch((e) => { migrating = null; console.warn('migration', e); });
+  return migrating;
+}
+
+/** Identifiant du compte Instagram actuellement connecté (mémorisé pour les pages de l'extension). */
+async function activeAccount() {
+  const { userId } = await ig.session();
+  const { activeAccount: prev } = await chrome.storage.local.get('activeAccount');
+  if (userId) {
+    await migrateLegacy(userId);
+    if (prev !== userId) await chrome.storage.local.set({ activeAccount: userId });
+    return userId;
+  }
+  return prev || 'default';
+}
+
+const acctKey = (base, pk) => `${base}:${pk}`;
+
 async function upsertLead(lead) {
+  const owner = await activeAccount();
   const cur = await db.get('leads', lead.pk);
-  if (!cur) return db.put('leads', lead);
+  if (!cur) return db.put('leads', { ...lead, owners: [owner] });
   // Ne pas écraser le travail commercial (statut, notes, score).
-  const merged = { ...cur };
+  const merged = { ...cur, owners: [...new Set([...(cur.owners || []), owner])] };
   for (const [k, v] of Object.entries(lead)) {
     if (['status', 'notes', 'score', 'scoreReason', 'addedAt', 'source'].includes(k)) continue;
     if (v !== undefined && v !== null && v !== '') merged[k] = v;
@@ -280,7 +322,14 @@ const AL_DEFAULT = {
   state: 'off', resumeAt: 0, likedList: [], lastResult: '',
 };
 
-async function loadAL() { return { ...AL_DEFAULT, ...(await getState('autolike', {})) }; }
+async function loadAL() {
+  const pk = await activeAccount();
+  return { ...AL_DEFAULT, ...(await getState(acctKey('autolike', pk), {})), _pk: pk };
+}
+
+function saveAL(st) {
+  return setState(acctKey('autolike', st._pk), st);
+}
 
 function alLog(st, kind, text, extra = {}) {
   st.log.unshift({ ts: Date.now(), kind, text, ...extra });
@@ -412,7 +461,7 @@ async function runAutomations({ force = false, only = null } = {}) {
     if (due('nurture', a.nurture.everyDays * 86400e3)) {
       const gap = a.nurture.everyDays * 86400e3;
       const leads = (await db.all('leads'))
-        .filter((l) => a.nurture.statuses.includes(l.status) && !l.isPrivate && (!l.nurturedAt || Date.now() - l.nurturedAt > gap))
+        .filter((l) => (!l.owners || l.owners.includes(st._pk)) && a.nurture.statuses.includes(l.status) && !l.isPrivate && (!l.nurturedAt || Date.now() - l.nurturedAt > gap))
         .slice(0, a.nurture.max);
       const added = pushPriority(st, leads.map((l) => ({
         userPk: l.pk, username: l.username, source: `auto : lead ${l.status}`, priority: true, repeatUser: true, leadPk: l.pk,
@@ -424,7 +473,7 @@ async function runAutomations({ force = false, only = null } = {}) {
     alLog(st, 'error', `Automatisation : ${e.message}`);
     results.push(`Erreur : ${e.message}`);
   }
-  await setState('autolike', { ...(await loadAL()), queue: st.queue, autoRuns: st.autoRuns, autoStats: st.autoStats, knownFollowers: st.knownFollowers, log: st.log });
+  await saveAL({ ...(await loadAL()), queue: st.queue, autoRuns: st.autoRuns, autoStats: st.autoStats, knownFollowers: st.knownFollowers, log: st.log });
   return results.length ? results.join(' · ') : 'Aucune automatisation à lancer (désactivées ou pas encore dues).';
 }
 
@@ -439,7 +488,7 @@ async function autolikeTick(force = false) {
     const cfg = clampAutolike(s.autolike);
     const st = await loadAL();
     if (!cfg.enabled && !force) {
-      if (st.state !== 'off') { st.state = 'off'; st.status = 'Désactivé'; await setState('autolike', st); }
+      if (st.state !== 'off') { st.state = 'off'; st.status = 'Désactivé'; await saveAL(st); }
       return 'Auto-like désactivé.';
     }
     const now = new Date();
@@ -450,8 +499,8 @@ async function autolikeTick(force = false) {
     const limit = effectiveDailyLimit(cfg, st.firstRunDay, today);
     st.limitToday = limit;
 
-    const stop = async (state, status) => { st.state = state; st.status = status; st.lastResult = status; await setState('autolike', st); return status; };
-    const save = () => setState('autolike', st);
+    const stop = async (state, status) => { st.state = state; st.status = status; st.lastResult = status; await saveAL(st); return status; };
+    const save = () => saveAL(st);
     // (pauseReason couvre aussi les pauses enregistrées avant la v0.6.3, sans pauseKind)
     if (st.pausedUntil > Date.now() && (st.pauseKind === 'auth' || /Non connecté/.test(st.pauseReason || '')) && (await ig.session()).loggedIn) {
       st.pausedUntil = 0;
@@ -620,18 +669,20 @@ async function capturePostsViaPage(profile) {
 
 async function takeSnapshot(profile) {
   const me = profile || await ig.me();
-  const snaps = await getState('snapshots', []);
+  const snapKey = acctKey('snapshots', me.pk);
+  const snaps = await getState(snapKey, []);
   const today = dayKey();
   const entry = { date: today, followers: me.followers, following: me.following, posts: me.posts };
   const idx = snaps.findIndex((s) => s.date === today);
   if (idx >= 0) snaps[idx] = entry; else snaps.push(entry);
-  await setState('snapshots', snaps.slice(-400));
+  await setState(snapKey, snaps.slice(-400));
 }
 
 async function checkFollowBacks() {
+  const pk = await activeAccount();
   const leads = await db.all('leads');
   const due = leads
-    .filter((l) => l.status === 'liked' && l.likedAt && Date.now() - l.likedAt > 86400000 && l.followBack == null)
+    .filter((l) => (!l.owners || l.owners.includes(pk)) && l.status === 'liked' && l.likedAt && Date.now() - l.likedAt > 86400000 && l.followBack == null)
     .sort((a, b) => a.likedAt - b.likedAt)
     .slice(0, LIMITS.followBackChecksPerDay);
   let warm = 0;
@@ -650,12 +701,13 @@ async function checkFollowBacks() {
 }
 
 async function daily() {
-  const last = await getState('lastDaily', '');
+  const dailyKey = acctKey('lastDaily', await activeAccount());
+  const last = await getState(dailyKey, '');
   const now = new Date();
   if (last === dayKey(now) || now.getHours() < 8) return;
   const { loggedIn } = await ig.session();
   if (!loggedIn) return;
-  await setState('lastDaily', dayKey(now));
+  await setState(dailyKey, dayKey(now));
   try { await takeSnapshot(); } catch (e) { console.warn('snapshot', e); }
   try { await checkFollowBacks(); } catch (e) { console.warn('followback', e); }
 }
@@ -667,6 +719,8 @@ async function daily() {
 async function publishPost(id) {
   const post = await db.get('posts', id);
   if (!post) throw new Error('Post introuvable');
+  const { userId } = await ig.session();
+  if (post.owner && userId && post.owner !== userId) throw new Error('Ce post appartient à un autre compte Instagram : connecte-toi à ce compte pour le publier.');
   if (post.media.some((m) => !m.type.startsWith('image/'))) throw new Error('La publication auto ne gère que les photos. Utilise le mode mobile pour les vidéos/reels.');
   const images = post.media.map((m) => ({ blob: m.blob, width: m.width, height: m.height }));
   try {
@@ -687,6 +741,14 @@ async function publishPost(id) {
 async function onPostAlarm(id) {
   const post = await db.get('posts', id);
   if (!post || post.status !== 'scheduled') return;
+  const { userId } = await ig.session();
+  if (post.owner && userId && post.owner !== userId) {
+    post.status = 'due';
+    post.error = 'Programmé pour un autre compte Instagram : connecte-toi à ce compte puis publie.';
+    await db.put('posts', post);
+    notify(`post:${id}`, 'Post programmé pour un autre compte', 'Connecte-toi au compte Instagram concerné, puis clique pour publier.');
+    return;
+  }
   const s = await getSettings();
   const title = (post.caption || 'Sans légende').slice(0, 60);
   if (s.publish.mode === 'auto' && post.media.every((m) => m.type.startsWith('image/'))) {
@@ -718,7 +780,8 @@ const handlers = {
   async 'frame:register'(_, sender) { await registerFrameTab(sender.tab.id); return true; },
   async 'app:open'({ hash }) { await openApp(hash); return true; },
 
-  async 'ig:session'() { return ig.session(); },
+  async 'ig:session'() { const s = await ig.session(); await activeAccount(); return s; },
+  async 'account:active'() { return activeAccount(); },
   async 'media:download'({ code, fallbackUrls = [], username = '' }) {
     let files = [];
     let owner = username || 'instagram';
@@ -791,7 +854,7 @@ const handlers = {
       }
     }
     if (self) await takeSnapshot(profile).catch(() => {});
-    return { profile, posts: posts.slice(0, 60), postsSource, postsError, snapshots: self ? await getState('snapshots', []) : [] };
+    return { profile, posts: posts.slice(0, 60), postsSource, postsError, snapshots: self ? await getState(acctKey('snapshots', profile.pk), []) : [] };
   },
   async 'ig:hashtag'({ tag }) {
     const r = await ig.hashtagMedia(tag);
@@ -816,8 +879,8 @@ const handlers = {
   async 'autolike:tick'() { await autolikeTick(); return loadAL(); },
   async 'autolike:runNow'() { return autolikeTick(true); },
   async 'autolike:runAutomations'({ only }) { return runAutomations({ force: true, only }); },
-  async 'autolike:resume'() { await patchState('autolike', { pausedUntil: 0, pauseReason: '', nextActionAt: 0 }); return true; },
-  async 'autolike:resetQueue'() { await patchState('autolike', { queue: [] }); return true; },
+  async 'autolike:resume'() { await saveAL({ ...(await loadAL()), pausedUntil: 0, pauseReason: '', pauseKind: '', nextActionAt: 0 }); return true; },
+  async 'autolike:resetQueue'() { await saveAL({ ...(await loadAL()), queue: [] }); return true; },
 
   async 'post:publishNow'({ id }) { return publishPost(id); },
   async 'post:schedule'({ id }) {

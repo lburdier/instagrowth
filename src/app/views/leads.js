@@ -1,7 +1,7 @@
 // Vue Leads : recherche (hashtag, abonnés concurrents, likers, import), mini-CRM,
 // scoring IA, messages d'approche IA, export CSV.
 
-import { send, busy, toast, $, $$, navigate } from '../ui.js';
+import { send, busy, toast, $, $$, navigate, activeAccountId } from '../ui.js';
 import { db } from '../../lib/db.js';
 import { complete } from '../../lib/ai.js';
 import { escapeHtml, fmtNum, fmtDate, toCsv, downloadText } from '../../lib/util.js';
@@ -27,7 +27,9 @@ const SOURCES = {
 const csvList = (v) => v.split(',').map((s) => s.trim()).filter(Boolean);
 
 async function reload() {
-  leads = await db.all('leads');
+  // Uniquement les leads du compte Instagram actif (les anciens leads sans compte restent visibles).
+  const acct = await activeAccountId();
+  leads = (await db.all('leads')).filter((l) => !l.owners || l.owners.includes(acct));
   renderCounts();
   renderTable();
 }

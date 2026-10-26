@@ -1,7 +1,7 @@
 // Vue Auto-like : statut en direct, liste détaillée des comptes likés,
 // réglages (cibles, limites) et journal d'activité.
 
-import { send, busy, toast, $, $$, navigate } from '../ui.js';
+import { send, busy, toast, $, $$, navigate, accountKey } from '../ui.js';
 import { getSettings, saveSettings } from '../../lib/store.js';
 import { LIMITS, clampAutolike, effectiveDailyLimit } from '../../lib/limits.js';
 import { db } from '../../lib/db.js';
@@ -293,7 +293,10 @@ function renderLog() {
 // --- Rafraîchissement & onglets ----------------------------------------------------
 
 async function refresh() {
-  st = (await chrome.storage.local.get('autolike')).autolike || {};
+  const key = await accountKey('autolike');
+  st = (await chrome.storage.local.get(key))[key] || {};
+  const { me } = await chrome.storage.local.get('me');
+  $('#al-account', el).innerHTML = me && key.endsWith(`:${me.pk}`) ? `Compte : <strong>@${escapeHtml(me.username)}</strong>` : '';
   if (tab === 'liked') leadsByPk = new Map((await db.all('leads')).map((l) => [l.pk, l]));
   $('#al-tab-liked-count', el).textContent = (st.likedList || []).length ? ` (${(st.likedList || []).length})` : '';
   if (tab === 'overview') renderOverview();
@@ -315,7 +318,8 @@ export default {
     cfg = clampAutolike((await getSettings()).autolike);
     el.innerHTML = `
       <div class="view-head">
-        <div><h1>Auto-like</h1><p class="muted">Like quotidien et ciblé des posts de ton audience idéale pour attirer des abonnés et générer des leads chauds.</p></div>
+        <div><h1>Auto-like</h1><p class="muted">Like quotidien et ciblé des posts de ton audience idéale pour attirer des abonnés et générer des leads chauds.</p>
+          <p class="muted" id="al-account" style="margin:4px 0 0"></p></div>
         <div class="row"><span style="font-weight:600">Activer</span><label class="switch"><input type="checkbox" id="al-enabled"><span></span></label></div>
       </div>
 
@@ -468,7 +472,9 @@ export default {
       expanded.has(ts) ? expanded.delete(ts) : expanded.add(ts);
       renderLiked();
     };
-    chrome.storage.onChanged.addListener((c) => { if (c.autolike && el.classList.contains('active')) refresh(); });
+    chrome.storage.onChanged.addListener((c) => {
+      if ((Object.keys(c).some((k) => k.startsWith('autolike:')) || c.activeAccount) && el.classList.contains('active')) refresh();
+    });
   },
   show() {
     refresh();

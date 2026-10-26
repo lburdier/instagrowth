@@ -1,7 +1,7 @@
 // Vue Publication : éditeur (photos/carrousel, recadrage), légendes & hashtags IA,
 // aperçu, brouillons, programmation et calendrier.
 
-import { send, busy, toast, $, $$, navigate } from '../ui.js';
+import { send, busy, toast, $, $$, navigate, activeAccountId } from '../ui.js';
 import { db } from '../../lib/db.js';
 import { complete } from '../../lib/ai.js';
 import { getSettings, saveSettings } from '../../lib/store.js';
@@ -130,7 +130,10 @@ function toLocalInput(ts) {
 }
 
 async function loadPosts() {
-  posts = (await db.all('posts')).sort((a, b) => (b.scheduledAt || b.createdAt) - (a.scheduledAt || a.createdAt));
+  const acct = await activeAccountId();
+  posts = (await db.all('posts'))
+    .filter((p) => !p.owner || p.owner === acct)
+    .sort((a, b) => (b.scheduledAt || b.createdAt) - (a.scheduledAt || a.createdAt));
   renderCalendar();
   renderList();
 }
@@ -185,6 +188,7 @@ async function persist(status = draft.status) {
   draft.status = status;
   draft.caption = $('#pub-caption', el).value;
   draft.firstComment = $('#pub-comment', el).value;
+  draft.owner ||= await activeAccountId();
   await db.put('posts', serializable());
   await loadPosts();
 }

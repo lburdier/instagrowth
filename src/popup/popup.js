@@ -14,7 +14,9 @@ document.body.addEventListener('click', (e) => {
 });
 
 async function render() {
-  const { me, autolike: st = {} } = await chrome.storage.local.get(['me', 'autolike']);
+  const { me, activeAccount } = await chrome.storage.local.get(['me', 'activeAccount']);
+  const alKey = `autolike:${activeAccount || 'default'}`;
+  const st = (await chrome.storage.local.get(alKey))[alKey] || {};
   const res = await chrome.runtime.sendMessage({ type: 'ig:session' });
   const session = res?.data || {};
   $('#acc').innerHTML = session.loggedIn && me

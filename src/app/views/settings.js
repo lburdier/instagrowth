@@ -238,7 +238,7 @@ export default {
       if (settings.ai) { settings.ai.anthropic.apiKey = settings.ai.anthropic.oauthToken = ''; settings.ai.openrouter.apiKey = settings.ai.custom.apiKey = ''; }
       const posts = (await db.all('posts')).map(({ media, ...p }) => ({ ...p, mediaCount: media.length }));
       downloadText(`instagrowth-export-${new Date().toISOString().slice(0, 10)}.json`,
-        JSON.stringify({ settings, snapshots: all.snapshots, leads: await db.all('leads'), posts }, null, 2), 'application/json');
+        JSON.stringify({ settings, snapshots: Object.fromEntries(Object.entries(all).filter(([k]) => k.startsWith('snapshots:'))), leads: await db.all('leads'), posts }, null, 2), 'application/json');
     };
     $('#d-reset', el).onclick = async () => {
       if (!confirm('Supprimer TOUTES les données (réglages, leads, posts, historique) ?')) return;

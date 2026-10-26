@@ -1,5 +1,16 @@
 // Helpers d'interface partagés par toutes les vues.
 
+/** Clé de stockage propre au compte Instagram actif (ex. « autolike:1234 »). */
+export async function accountKey(base) {
+  let { activeAccount } = await chrome.storage.local.get('activeAccount');
+  if (!activeAccount) activeAccount = await send('account:active').catch(() => 'default');
+  return `${base}:${activeAccount || 'default'}`;
+}
+
+export async function activeAccountId() {
+  return (await accountKey('x')).slice(2);
+}
+
 /** Appel au service worker. */
 export async function send(type, payload = {}) {
   const res = await chrome.runtime.sendMessage({ type, ...payload });

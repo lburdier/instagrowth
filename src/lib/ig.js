@@ -543,7 +543,7 @@ export async function isLiked(pk) {
 }
 
 /** Like via la page de la publication, dans un onglet épinglé d'arrière-plan réutilisé. */
-export async function likeViaPage(code) {
+export async function likeViaPage(code, pk = '') {
   if (!code) throw new IgError('Code de publication manquant pour liker via la page', { kind: 'unknown' });
   const url = `${BASE}/p/${code}/`;
   if (likeTabId == null) likeTabId = (await chrome.storage.session.get('likeTabId')).likeTabId ?? null;
@@ -554,8 +554,8 @@ export async function likeViaPage(code) {
   await chrome.storage.session.set({ likeTabId });
   await waitComplete(tab.id);
   await sleep(2500 + rand(0, 1500));
-  let last = '';
-  for (let i = 0; i < 6; i++) {
+  let last = null;
+  for (let i = 0; i < 4; i++) {
     let res = null;
     try {
       res = await chrome.tabs.sendMessage(tab.id, { type: 'igg:likeUi' }, { frameId: 0 });
@@ -564,12 +564,14 @@ export async function likeViaPage(code) {
     }
     if (res?.status === 'liked' || res?.status === 'already') return res.status;
     if (res?.status === 'blocked') throw new IgError('Instagram a bloqué l’action J’aime (action bloquée).', { kind: 'feedback' });
-    last = res?.status || last;
+    last = res || last;
+    // Le cœur n'a pas changé à l'écran : on demande directement à Instagram si le like est enregistré.
+    if (res?.status === 'notconfirmed' && pk && (await isLiked(pk)) === true) return 'liked';
     await sleep(1500);
   }
-  throw new IgError(last === 'notconfirmed'
-    ? 'Like non confirmé par Instagram (le cœur n’est pas passé au rouge) : non compté.'
-    : 'Bouton J’aime introuvable sur la publication : non compté.', { kind: 'unknown' });
+  throw new IgError(last?.status === 'notconfirmed'
+    ? `Like non confirmé par Instagram (cœur inchangé, non enregistré) : non compté. Icônes vues : ${last.seen}`
+    : `Bouton J’aime introuvable sur la publication : non compté. Icônes vues : ${last?.seen || 'page non chargée'}`, { kind: 'unknown' });
 }
 
 /**
@@ -595,7 +597,7 @@ export async function likeMedia({ pk, ownerPk, code }) {
       await chrome.storage.local.set({ likeUiUntil: Date.now() + UI_MODE_MS });
     }
   }
-  const status = await likeViaPage(code);
+  const status = await likeViaPage(code, pk);
   if (status === 'already') return apiSent ? { via: 'api', verified: true } : { via: 'already', verified: true };
   return { via: 'page', verified: true };
 }

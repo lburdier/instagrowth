@@ -81,17 +81,43 @@
       .find((s) => re.test(s.getAttribute('aria-label')) && Number(s.getAttribute('width') || s.getBoundingClientRect().width) >= 20);
   }
 
+  /** Ce que l'extension voit sur la page (pour diagnostiquer un like non confirmé). */
+  function heartsSeen() {
+    const scope = document.querySelector('div[role="dialog"] article, main article, main') || document;
+    const labels = [...scope.querySelectorAll('svg[aria-label]')]
+      .map((s) => `${s.getAttribute('aria-label')} (${Math.round(Number(s.getAttribute('width')) || s.getBoundingClientRect().width)})`);
+    return [...new Set(labels)].slice(0, 8).join(', ') || 'aucune icône';
+  }
+
+  /** Séquence souris complète, comme un vrai clic. */
+  function realClick(el) {
+    const r = el.getBoundingClientRect();
+    const opts = { bubbles: true, cancelable: true, composed: true, view: window, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
+    el.dispatchEvent(new PointerEvent('pointerdown', { ...opts, pointerType: 'mouse', isPrimary: true }));
+    el.dispatchEvent(new MouseEvent('mousedown', opts));
+    el.dispatchEvent(new PointerEvent('pointerup', { ...opts, pointerType: 'mouse', isPrimary: true }));
+    el.dispatchEvent(new MouseEvent('mouseup', opts));
+    el.dispatchEvent(new MouseEvent('click', opts));
+  }
+
+  // Un seul clic par publication : recliquer pourrait retirer le like qu'on vient de mettre.
+  let clickedPath = '';
+
   async function likeUi() {
-    if (actionHeart(UNLIKE_RE)) return { status: 'already' };
-    const heart = actionHeart(LIKE_RE);
-    if (!heart) return { status: 'notfound' };
-    (heart.closest('[role="button"], button') || heart.parentElement).click();
-    for (let i = 0; i < 8; i++) {
-      await wait(400);
+    const clickedHere = clickedPath === location.pathname;
+    if (!clickedHere) {
+      if (actionHeart(UNLIKE_RE)) return { status: 'already' };
+      const heart = actionHeart(LIKE_RE);
+      if (!heart) return { status: 'notfound', seen: heartsSeen() };
+      clickedPath = location.pathname;
+      realClick(heart.closest('[role="button"], button') || heart.parentElement);
+    }
+    for (let i = 0; i < 20; i++) {
+      await wait(300);
       if (actionHeart(UNLIKE_RE)) return { status: 'liked' };
       if (/action bloquée|action blocked|try again later|réessayez plus tard/i.test(document.body.innerText.slice(-3000))) return { status: 'blocked' };
     }
-    return { status: 'notconfirmed' };
+    return { status: 'notconfirmed', seen: heartsSeen() };
   }
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

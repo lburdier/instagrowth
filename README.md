@@ -87,6 +87,12 @@ Les règles tournent toutes les 30 minutes ; le bouton **Lancer maintenant** dé
 
 Si l'adresse de like d'Instagram change (erreur 404), l'extension essaie d'autres routes connues. Si aucune ne marche, elle ouvre la publication dans un onglet épinglé d'arrière-plan et clique sur le vrai bouton « J'aime ».
 
+## Plusieurs comptes Instagram
+
+Les données sont séparées par compte Instagram connecté : état de l'auto-like (comptes likés, compteurs, file d'attente, automatisations), relevés d'abonnés et tâches quotidiennes.
+Les leads et les posts programmés sont rattachés au compte qui les a créés. Un post programmé n'est jamais publié sur un autre compte : l'extension te prévient de te connecter au bon compte.
+Les données enregistrées avant la v0.7.0 sont rattachées au dernier compte utilisé.
+
 ## IA : connexion
 
 - **Claude (Anthropic)** : bouton **Se connecter avec Claude** dans Réglages. La console Claude (platform.claude.com) s'ouvre ; tu crées une clé, puis tu cliques sur **Connecter à InstaGrowth** dans la carte qui s'affiche. La clé est vérifiée auprès d'Anthropic, l'onglet se ferme et tu reviens à InstaGrowth. Tu peux aussi coller une clé, ou un **jeton OAuth** (Bearer), dans « Options avancées ».
