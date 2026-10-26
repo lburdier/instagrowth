@@ -17,6 +17,11 @@ export const DEFAULT_SETTINGS = {
     language: 'fr',
     offer: '',
   },
+  phone: {
+    // Imiter un iPhone dans le cadre « téléphone » (nécessaire pour publier des stories). Désactivé par
+    // défaut : la même session vue à la fois sur un PC et sur un « iPhone » peut provoquer des déconnexions.
+    mobileUA: false,
+  },
   ghost: {
     stories: false, // mode fantôme : regarder les stories sans apparaître dans les vues
   },
@@ -28,6 +33,7 @@ export const DEFAULT_SETTINGS = {
     enabled: false,
     hashtags: [],
     competitors: [],
+    prospects: [], // liste de comptes à liker (prospects saisis ou importés depuis les leads)
     preset: 'prudent',
     dailyLimit: LIMITS.presets.prudent.daily,
     hourlyLimit: LIMITS.presets.prudent.hourly,

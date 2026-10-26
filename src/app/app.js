@@ -10,6 +10,7 @@ import settings from './views/settings.js';
 import { escapeHtml, fmtNum } from '../lib/util.js';
 import { send } from './ui.js';
 import { autoHydrate } from '../lib/icons.js';
+import { renderUpdateBanner } from '../lib/update.js';
 
 // Mode « embed » : affiché dans la fenêtre InstaGrowth intégrée à instagram.com,
 // avec le thème réel d'Instagram (clair/sombre) transmis en paramètre.
@@ -47,6 +48,10 @@ async function loadAccount() {
       <div class="account-meta"><strong>Non connecté</strong><small><a href="https://www.instagram.com/accounts/login/" target="_blank">Se connecter à Instagram</a></small></div>`;
   }
 }
+
+const banner = document.getElementById('update-banner');
+renderUpdateBanner(banner);
+chrome.storage.onChanged.addListener((c) => { if (c.updateAvailable) renderUpdateBanner(banner); });
 
 window.addEventListener('hashchange', route);
 route();

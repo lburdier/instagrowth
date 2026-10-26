@@ -8,7 +8,7 @@
   window.__iggLoaded = true;
 
   const EXT_ORIGIN = `chrome-extension://${chrome.runtime.id}`;
-  const inPhone = window.top !== window && window.name === 'igg-mobile';
+  const inPhone = window.top !== window && (window.name === 'igg-mobile' || window.name === 'igg-phone');
 
   function insertText(text) {
     let target = document.activeElement;
@@ -55,10 +55,10 @@
 
   async function igFetch({ path, method, headers, body, raw }) {
     const h = raw ? { accept: 'text/html,application/xhtml+xml', ...headers } : {
-      'x-ig-app-id': appId(),
+      'x-ig-app-id': document.documentElement.getAttribute('data-igg-appid') || appId(),
       'x-csrftoken': cookie('csrftoken'),
       'x-requested-with': 'XMLHttpRequest',
-      'x-asbd-id': '129477',
+      ...(document.documentElement.getAttribute('data-igg-asbd') ? { 'x-asbd-id': document.documentElement.getAttribute('data-igg-asbd') } : {}),
       'x-ig-www-claim': sessionStorage.getItem('www-claim-v2') || '0',
       ...(body?.kind === 'form' ? { 'content-type': 'application/x-www-form-urlencoded' } : {}),
       ...headers,
@@ -144,14 +144,17 @@
 
   // --- Publications captées par ig-capture.js (monde MAIN) --------------------------
   let pending = [];
+  let pendingUsers = [];
   let flushTimer = null;
   window.addEventListener('message', (e) => {
     if (e.source !== window || e.data?.source !== 'igg-capture' || !Array.isArray(e.data.items)) return;
     pending.push(...e.data.items);
+    pendingUsers.push(...(e.data.users || []));
     flushTimer ||= setTimeout(() => {
       flushTimer = null;
       const items = pending.splice(0);
-      if (chrome.runtime?.id) chrome.runtime.sendMessage({ type: 'capture:media', items }).catch(() => {});
+      const users = pendingUsers.splice(0);
+      if (chrome.runtime?.id) chrome.runtime.sendMessage({ type: 'capture:media', items, users }).catch(() => {});
     }, 800);
   });
   window.postMessage({ source: 'igg-capture-request' }, location.origin);

@@ -37,40 +37,63 @@ async function ensureBaseRules() {
 }
 
 /** Instagram mobile intégré dans un onglet du dashboard (style Inssist). */
-async function registerFrameTab(tabId) {
+async function registerFrameTab(tabId, mobileUA = false) {
   const [a, b] = frameRuleIds(tabId);
-  await chrome.declarativeNetRequest.updateSessionRules({
-    removeRuleIds: [a, b],
-    addRules: [
-      {
-        id: a,
-        priority: 2,
-        action: {
-          type: 'modifyHeaders',
-          responseHeaders: [
-            { header: 'x-frame-options', operation: 'remove' },
-            { header: 'content-security-policy', operation: 'remove' },
-            { header: 'content-security-policy-report-only', operation: 'remove' },
-          ],
-        },
-        condition: { tabIds: [tabId], requestDomains: ['instagram.com', 'ig.me'], resourceTypes: ['sub_frame'] },
+  const rules = [
+    {
+      id: a,
+      priority: 2,
+      action: {
+        type: 'modifyHeaders',
+        responseHeaders: [
+          { header: 'x-frame-options', operation: 'remove' },
+          { header: 'content-security-policy', operation: 'remove' },
+          { header: 'content-security-policy-report-only', operation: 'remove' },
+        ],
       },
-      {
-        id: b,
-        priority: 2,
-        action: {
-          type: 'modifyHeaders',
-          requestHeaders: [
-            { header: 'user-agent', operation: 'set', value: MOBILE_UA },
-            { header: 'sec-ch-ua-mobile', operation: 'set', value: '?1' },
-            { header: 'sec-ch-ua-platform', operation: 'set', value: '"iOS"' },
-          ],
-        },
-        condition: { tabIds: [tabId], requestDomains: ['instagram.com', 'cdninstagram.com', 'fbcdn.net'] },
+      condition: { tabIds: [tabId], requestDomains: ['instagram.com', 'ig.me'], resourceTypes: ['sub_frame'] },
+    },
+    {
+      id: b,
+      priority: 2,
+      action: {
+        type: 'modifyHeaders',
+        requestHeaders: [
+          { header: 'user-agent', operation: 'set', value: MOBILE_UA },
+          { header: 'sec-ch-ua-mobile', operation: 'set', value: '?1' },
+          { header: 'sec-ch-ua-platform', operation: 'set', value: '"iOS"' },
+        ],
       },
-    ],
-  });
+      condition: { tabIds: [tabId], requestDomains: ['instagram.com', 'cdninstagram.com', 'fbcdn.net'] },
+    },
+  ];
+  // Sans imitation iPhone, seule la règle d'affichage dans un cadre est gardée.
+  await chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [a, b], addRules: mobileUA ? rules : rules.slice(0, 1) });
 }
+
+// ---------------------------------------------------------------------------
+// Déconnexions Instagram : journal (avec les dernières actions de l'extension),
+// pause des automatisations et notification.
+// ---------------------------------------------------------------------------
+
+chrome.cookies.onChanged.addListener(async ({ removed, cookie, cause }) => {
+  if (!removed || cookie.name !== 'sessionid' || !cookie.domain.includes('instagram.com') || cause === 'overwrite') return;
+  const actions = (await ig.recentActivity()).filter((a) => Date.now() - a.at < 15 * 60e3).slice(-15);
+  const { logoutEvents = [], activeAccount: acct } = await chrome.storage.local.get(['logoutEvents', 'activeAccount']);
+  logoutEvents.unshift({ at: Date.now(), cause, actions });
+  await chrome.storage.local.set({ logoutEvents: logoutEvents.slice(0, 20) });
+  if (acct) {
+    const key = `autolike:${acct}`;
+    const st = (await chrome.storage.local.get(key))[key];
+    if (st) {
+      await chrome.storage.local.set({ [key]: { ...st, pausedUntil: Date.now() + 30 * 60e3, pauseKind: 'auth',
+        pauseReason: 'Instagram t’a déconnecté : automatisations en pause (reprise dès que tu es reconnecté).' } });
+    }
+  }
+  notify('logout', 'Instagram t’a déconnecté', cause === 'explicit'
+    ? 'Session fermée (par toi ou par Instagram). Les automatisations sont en pause ; le détail est dans Réglages → Connexion Instagram.'
+    : 'Session expirée. Les automatisations sont en pause ; le détail est dans Réglages → Connexion Instagram.');
+});
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: frameRuleIds(tabId) }).catch(() => {});
@@ -84,6 +107,8 @@ async function ensureAlarms() {
   if (!(await chrome.alarms.get('autolike-tick'))) chrome.alarms.create('autolike-tick', { periodInMinutes: 1 });
   if (!(await chrome.alarms.get('daily'))) chrome.alarms.create('daily', { delayInMinutes: 1, periodInMinutes: 60 });
   if (!(await chrome.alarms.get('automations'))) chrome.alarms.create('automations', { delayInMinutes: 2, periodInMinutes: 30 });
+  if (!(await chrome.alarms.get('update-check'))) chrome.alarms.create('update-check', { delayInMinutes: 1, periodInMinutes: 360 });
+  if (!(await chrome.alarms.get('enrich-leads'))) chrome.alarms.create('enrich-leads', { delayInMinutes: 3, periodInMinutes: 6 });
 }
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
@@ -91,7 +116,7 @@ chrome.runtime.onInstalled.addListener(async ({ reason }) => {
   await ensureAlarms();
   if (reason === 'install') openApp('settings');
 });
-chrome.runtime.onStartup.addListener(async () => { await ensureBaseRules(); await ensureAlarms(); });
+chrome.runtime.onStartup.addListener(async () => { await ensureBaseRules(); await ensureAlarms(); checkForUpdate().catch(() => {}); });
 ensureBaseRules().catch(console.error);
 
 async function openApp(hash = '') {
@@ -143,10 +168,58 @@ async function verifyClaudeKey(key, kind) {
   throw new Error(`Vérification impossible (HTTP ${res.status}). Réessaie.`);
 }
 
+// ---------------------------------------------------------------------------
+// Mises à jour : vérifie la dernière release GitHub toutes les 6 h et prévient
+// (notification, pastille sur l'icône, bandeau dans le dashboard et la popup).
+// ---------------------------------------------------------------------------
+
+const UPDATE_REPO = 'lburdier/instagrowth';
+
+/** a > b au sens des versions « 1.2.3 » ? */
+export function isNewer(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0;
+  }
+  return false;
+}
+
+async function checkForUpdate() {
+  const res = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, { headers: { accept: 'application/vnd.github+json' } });
+  if (!res.ok) throw new Error(`Vérification impossible (GitHub ${res.status})`);
+  const r = await res.json();
+  const latest = String(r.tag_name || '').replace(/^v/, '');
+  const current = chrome.runtime.getManifest().version;
+  if (!latest || !isNewer(latest, current)) {
+    await chrome.storage.local.remove('updateAvailable');
+    await chrome.action.setBadgeText({ text: '' });
+    return { current, latest, available: false };
+  }
+  const zip = (r.assets || []).find((a) => a.name.endsWith('.zip'));
+  const info = { version: latest, url: r.html_url, zip: zip?.browser_download_url || '', zipName: zip?.name || '', checkedAt: Date.now() };
+  await chrome.storage.local.set({ updateAvailable: info });
+  await chrome.action.setBadgeBackgroundColor({ color: '#0095f6' });
+  await chrome.action.setBadgeText({ text: 'MAJ' });
+  const { updateNotified } = await chrome.storage.local.get('updateNotified');
+  if (updateNotified !== latest) {
+    notify('update', `InstaGrowth ${latest} est disponible`, `Tu utilises la version ${current}. Clique pour voir les nouveautés et mettre à jour.`);
+    await chrome.storage.local.set({ updateNotified: latest });
+  }
+  return { current, latest, available: true };
+}
+
 chrome.notifications.onClicked.addListener((id) => {
+  if (id === 'update') {
+    chrome.storage.local.get('updateAvailable').then(({ updateAvailable }) => chrome.tabs.create({ url: updateAvailable?.url || `https://github.com/${UPDATE_REPO}/releases/latest` }));
+    chrome.notifications.clear(id);
+    return;
+  }
   if (id.startsWith('post:')) openApp(`publisher/${id.slice(5)}`);
   else if (id.startsWith('autolike')) openApp('autolike');
   else if (id.startsWith('leads')) openApp('leads');
+  else if (id === 'logout') openApp('settings');
   else openApp();
   chrome.notifications.clear(id);
 });
@@ -211,11 +284,38 @@ function migrateLegacy(currentPk) {
 }
 
 /** Identifiant du compte Instagram actuellement connecté (mémorisé pour les pages de l'extension). */
+let cleaning = null;
+
+/**
+ * Correctif v0.7.3 : la lecture de page pouvait attribuer TA bio / catégorie / statut pro aux
+ * leads et aux comptes likés. On efface ces champs quand ils sont identiques aux tiens.
+ */
+function cleanupLeakedProfiles() {
+  cleaning ||= (async () => {
+    const { cleanedBiosV1, me } = await chrome.storage.local.get(['cleanedBiosV1', 'me']);
+    if (cleanedBiosV1 || !me?.bio) return;
+    const leaked = (x) => x.pk !== me.pk && x.userPk !== me.pk && x.username !== me.username && x.bio && x.bio === me.bio;
+    const scrub = (x) => ({ ...x, bio: '', category: x.category === me.category ? '' : x.category, isBusiness: x.category === me.category ? false : x.isBusiness });
+    const leads = (await db.all('leads')).filter(leaked);
+    if (leads.length) await db.putMany('leads', leads.map(scrub));
+    const all = await chrome.storage.local.get(null);
+    const patch = { cleanedBiosV1: true };
+    for (const [k, v] of Object.entries(all)) {
+      if (k.startsWith('autolike:') && Array.isArray(v?.likedList) && v.likedList.some(leaked)) {
+        patch[k] = { ...v, likedList: v.likedList.map((x) => (leaked(x) ? scrub(x) : x)) };
+      }
+    }
+    await chrome.storage.local.set(patch);
+  })().catch((e) => { cleaning = null; console.warn('cleanup', e); });
+  return cleaning;
+}
+
 async function activeAccount() {
   const { userId } = await ig.session();
   const { activeAccount: prev } = await chrome.storage.local.get('activeAccount');
   if (userId) {
     await migrateLegacy(userId);
+    cleanupLeakedProfiles();
     if (prev !== userId) await chrome.storage.local.set({ activeAccount: userId });
     return userId;
   }
@@ -351,6 +451,7 @@ async function refillQueue(cfg, st) {
   const sources = [
     ...cfg.hashtags.map((h) => ({ type: 'hashtag', value: h })),
     ...cfg.competitors.map((c) => ({ type: 'competitor', value: c })),
+    ...(cfg.prospects?.length ? [{ type: 'prospects', value: cfg.prospects }] : []),
   ];
   if (!sources.length) { st.status = 'Aucune source configurée'; st.state = 'nosource'; return; }
   const src = sources[st.sourceIdx % sources.length];
@@ -358,7 +459,18 @@ async function refillQueue(cfg, st) {
   const likedSet = new Set(st.liked);
   const { userId } = await ig.session();
   const fresh = [];
-  if (src.type === 'hashtag') {
+  if (src.type === 'prospects') {
+    // Liste de prospects : chacun reçoit au plus un like tous les 30 jours.
+    st.prospectsDone ||= {};
+    const cutoff = Date.now() - 30 * 86400000;
+    const queued = new Set(st.queue.map((q) => q.username?.toLowerCase()));
+    for (const name of src.value) {
+      const u = name.replace(/^@/, '').toLowerCase();
+      if (!u || queued.has(u) || (st.prospectsDone[u] || 0) > cutoff) continue;
+      fresh.push({ username: u, source: 'liste de prospects', priority: true, prospect: true });
+      if (fresh.length >= 20) break;
+    }
+  } else if (src.type === 'hashtag') {
     const { media } = await ig.hashtagMedia(src.value);
     for (const m of media) {
       if (!m.user || m.user.pk === userId || m.likedByViewer || likedSet.has(m.pk) || st.users[m.user.pk]) continue;
@@ -375,7 +487,8 @@ async function refillQueue(cfg, st) {
   // Mélange pour éviter un motif régulier.
   fresh.sort(() => Math.random() - 0.5);
   st.queue = [...st.queue, ...fresh].slice(0, 150);
-  alLog(st, 'info', `${fresh.length} cibles ajoutées depuis ${src.type === 'hashtag' ? '#' + src.value.replace(/^#/, '') : '@' + src.value.replace(/^@/, '')}`);
+  const label = src.type === 'prospects' ? 'la liste de prospects' : src.type === 'hashtag' ? '#' + src.value.replace(/^#/, '') : '@' + src.value.replace(/^@/, '');
+  alLog(st, 'info', `${fresh.length} cibles ajoutées depuis ${label}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -558,7 +671,14 @@ async function autolikeTick(force = false) {
         const needsProfile = !item.mediaPk || (strict && (cfg.minFollowers > 0 || cfg.maxFollowers > 0)) || cfg.blacklist.length || cfg.addToLeads;
         let profile = null;
         if (needsProfile) {
-          try { profile = await ig.profileByUsername(item.username); } catch (e) { if (e.kind === 'notfound') continue; throw e; }
+          try { profile = await ig.profileByUsername(item.username); } catch (e) {
+            if (e.kind === 'notfound') { if (item.prospect) st.prospectsDone[item.username] = Date.now(); continue; }
+            throw e;
+          }
+          if (!item.userPk && profile.pk) {
+            item.userPk = profile.pk;
+            if (st.users[item.userPk] && !item.repeatUser) { if (item.prospect) st.prospectsDone[item.username] = Date.now(); continue; }
+          }
           const bio = `${profile.bio || ''} ${profile.fullName || ''}`.toLowerCase();
           const skip =
             (cfg.skipPrivate && profile.isPrivate && 'privé') ||
@@ -567,11 +687,11 @@ async function autolikeTick(force = false) {
             (strict && cfg.maxFollowers && (profile.followers ?? 0) > cfg.maxFollowers && 'trop d’abonnés') ||
             (cfg.blacklist.some((w) => w && bio.includes(w.toLowerCase())) && 'mot blacklisté') ||
             (strict && profile.followedByViewer && 'déjà suivi');
-          if (skip) { st.users[item.userPk] = Date.now(); alLog(st, 'skip', `@${item.username} ignoré (${skip})`); continue; }
+          if (skip) { st.users[item.userPk] = Date.now(); if (item.prospect) st.prospectsDone[item.username] = Date.now(); alLog(st, 'skip', `@${item.username} ignoré (${skip})`); continue; }
           if (!item.mediaPk) {
             const pool = profile.recent?.length ? profile.recent : await ig.userFeed(profile.pk, { max: 3, username: profile.username });
             const recent = pool.find((m) => !m.likedByViewer && !st.liked.includes(m.pk));
-            if (!recent) { st.users[item.userPk] = Date.now(); alLog(st, 'skip', `@${item.username} ignoré (aucun post)`); continue; }
+            if (!recent) { st.users[item.userPk] = Date.now(); if (item.prospect) st.prospectsDone[item.username] = Date.now(); alLog(st, 'skip', `@${item.username} ignoré (aucun post)`); continue; }
             Object.assign(item, { mediaPk: recent.pk, code: recent.code, thumb: recent.thumb });
           }
         }
@@ -587,6 +707,7 @@ async function autolikeTick(force = false) {
         st.history[today] = (st.history[today] || 0) + 1;
         st.liked = [item.mediaPk, ...st.liked].slice(0, 3000);
         st.users[item.userPk] = Date.now();
+        if (item.prospect) st.prospectsDone[item.username] = Date.now();
         alLog(st, 'like', `Like vérifié sur Instagram : @${item.username} (${item.source})${via === 'page' ? ' · clic sur la page' : ''}`, { username: item.username, code: item.code, thumb: item.thumb });
         st.likedList = [{
           ts: Date.now(), userPk: item.userPk, username: item.username, mediaPk: item.mediaPk, code: item.code, thumb: item.thumb, source: item.source,
@@ -659,6 +780,69 @@ function storeCaptured(rawItems) {
     await setState('captured', Object.fromEntries(users));
   }).catch((e) => console.warn('capture', e));
   return captureWrite;
+}
+
+// ---------------------------------------------------------------------------
+// Complétion des leads : bio, catégorie et contacts récupérés petit à petit
+// (API si elle répond, sinon profil capté ou visite du profil dans l'onglet de travail).
+// ---------------------------------------------------------------------------
+
+let enriching = false;
+
+function needsEnrich(l) {
+  return !l.bio && (l.enrichAttempts || 0) < 3 && (!l.enrichedAt || Date.now() - l.enrichedAt > 6 * 3600e3);
+}
+
+async function enrichLeads({ pks = null, max = 2 } = {}) {
+  if (enriching) return 0;
+  enriching = true;
+  let done = 0;
+  try {
+    const acct = await activeAccount();
+    const leads = (await db.all('leads'))
+      .filter((l) => (!l.owners || l.owners.includes(acct)) && (pks ? pks.includes(l.pk) : needsEnrich(l)))
+      .slice(0, max);
+    for (const l of leads) {
+      let p = await ig.capturedProfile(l.username);
+      if (!p?.bio) {
+        try { p = await ig.profileByUsername(l.username); } catch (e) { if (['rate', 'feedback', 'checkpoint', 'auth'].includes(e.kind)) break; }
+      }
+      if (!p?.bio) p = (await ig.visitProfile(l.username)) || p;
+      const c = extractContacts(p?.bio || '');
+      await db.update('leads', l.pk, (cur) => cur && {
+        ...cur,
+        bio: p?.bio || cur.bio || '',
+        category: p?.category || cur.category || '',
+        isBusiness: p?.bio ? Boolean(p.isBusiness) : cur.isBusiness,
+        email: cur.email || p?.publicEmail || c.email || '',
+        phone: cur.phone || p?.publicPhone || c.phone || '',
+        externalUrl: cur.externalUrl || p?.externalUrl || '',
+        fullName: cur.fullName || p?.fullName || '',
+        enrichedAt: Date.now(),
+        enrichAttempts: (cur.enrichAttempts || 0) + 1,
+      });
+      if (p?.bio) done++;
+    }
+  } finally {
+    enriching = false;
+  }
+  return done;
+}
+
+let usersWrite = Promise.resolve();
+
+/** Profils (bio, contacts) vus sur les pages Instagram, gardés 7 jours (800 au plus). */
+function storeCapturedUsers(users) {
+  usersWrite = usersWrite.then(async () => {
+    const { capturedUsers = {} } = await chrome.storage.local.get('capturedUsers');
+    for (const u of users) {
+      if (!u?.username || typeof u.biography !== 'string') continue;
+      capturedUsers[u.username.toLowerCase()] = { user: u, at: Date.now() };
+    }
+    const kept = Object.entries(capturedUsers).sort((a, b) => b[1].at - a[1].at).slice(0, 800);
+    await chrome.storage.local.set({ capturedUsers: Object.fromEntries(kept) });
+  }).catch((e) => console.warn('capture users', e));
+  return usersWrite;
 }
 
 async function capturedPosts(profile, since = 0) {
@@ -793,14 +977,24 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'autolike-tick') autolikeTick();
   else if (alarm.name === 'daily') daily();
   else if (alarm.name === 'automations') runAutomations();
+  else if (alarm.name === 'update-check') checkForUpdate().catch((e) => console.warn('update', e));
+  else if (alarm.name === 'enrich-leads') enrichLeads().catch((e) => console.warn('enrich', e));
   else if (alarm.name.startsWith('post:')) onPostAlarm(alarm.name.slice(5));
 });
 
 const handlers = {
-  async 'frame:register'(_, sender) { await registerFrameTab(sender.tab.id); return true; },
+  async 'frame:register'({ mobileUA }, sender) { await registerFrameTab(sender.tab.id, Boolean(mobileUA)); return true; },
   async 'app:open'({ hash }) { await openApp(hash); return true; },
 
   async 'ig:session'() { const s = await ig.session(); await activeAccount(); return s; },
+  async 'update:check'() { return checkForUpdate(); },
+  async 'update:download'() {
+    const { updateAvailable: u } = await chrome.storage.local.get('updateAvailable');
+    if (!u?.zip) throw new Error('Aucun fichier de mise à jour trouvé.');
+    await chrome.downloads.download({ url: u.zip, filename: `InstaGrowth/${u.zipName || `instagrowth-v${u.version}.zip`}`, conflictAction: 'uniquify' });
+    return true;
+  },
+  async 'update:reload'() { setTimeout(() => chrome.runtime.reload(), 200); return true; },
   async 'account:active'() { return activeAccount(); },
   async 'media:download'({ code, fallbackUrls = [], username = '' }) {
     let files = [];
@@ -824,7 +1018,11 @@ const handlers = {
     }
     return { count: files.length, videos: files.filter((f) => f.type === 'video').length };
   },
-  async 'capture:media'({ items }) { if (Array.isArray(items) && items.length) await storeCaptured(items.slice(0, 500)); return true; },
+  async 'capture:media'({ items, users }) {
+    if (Array.isArray(items) && items.length) await storeCaptured(items.slice(0, 500));
+    if (Array.isArray(users) && users.length) await storeCapturedUsers(users.slice(0, 200));
+    return true;
+  },
   async 'claude:startConnect'(_, sender) {
     const tab = await chrome.tabs.create({ url: CLAUDE_KEYS_URL, openerTabId: sender.tab?.id });
     await setState('claudeConnect', { consoleTabId: tab.id, returnTabId: sender.tab?.id ?? null, startedAt: Date.now() });
@@ -895,6 +1093,24 @@ const handlers = {
     return { username: p.username };
   },
   async 'leads:checkFollowBacks'() { await checkFollowBacks(); return true; },
+  async 'leads:enrich'({ pks }) { return enrichLeads({ pks, max: Math.min(10, pks?.length || 10) }); },
+  async 'leads:addManual'({ username, fields = {} }) {
+    const name = String(username || '').trim().replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/.*$/, '');
+    if (!/^[A-Za-z0-9._]{1,30}$/.test(name)) throw new Error('Nom de compte Instagram invalide.');
+    let lead;
+    try {
+      lead = leadFromUser(await ig.profileByUsername(name), 'ajout manuel');
+    } catch (e) {
+      if (e.kind === 'notfound' && !String(e.message).includes('[')) throw new Error(`Le compte @${name} n’existe pas.`);
+      // Instagram indisponible : on enregistre quand même, la complétion repassera plus tard.
+      lead = leadFromUser({ pk: `u:${name.toLowerCase()}`, username: name }, 'ajout manuel');
+    }
+    for (const k of ['fullName', 'email', 'phone', 'notes']) if (fields[k]) lead[k] = fields[k];
+    if (fields.status) lead.status = fields.status;
+    await upsertLead(lead);
+    if (fields.status || fields.notes) await db.update('leads', lead.pk, (cur) => cur && { ...cur, ...(fields.status ? { status: fields.status } : {}), ...(fields.notes ? { notes: fields.notes } : {}) });
+    return { username: lead.username, pk: lead.pk };
+  },
 
   async 'autolike:tick'() { await autolikeTick(); return loadAL(); },
   async 'autolike:runNow'() { return autolikeTick(true); },

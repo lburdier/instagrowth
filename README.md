@@ -64,6 +64,8 @@ InstaGrowth n'est pas publiée sur le Chrome Web Store : elle s'installe en **mo
 
 ### 3. Mettre à jour
 
+Depuis la v0.8.0, **InstaGrowth te prévient quand une nouvelle version sort** : notification, pastille « MAJ » sur son icône et bandeau dans le dashboard et la popup. Le bandeau propose **Télécharger**, **Nouveautés** et **Recharger l’extension**. Pour installer la mise à jour :
+
 1. Télécharge et décompresse le nouveau zip.
 2. Remplace le contenu de ton dossier InstaGrowth par les nouveaux fichiers. Tes données (réglages, leads, historique) sont conservées : elles sont stockées dans le navigateur, pas dans le dossier.
 3. Dans `chrome://extensions`, clique sur ⟳ (**Recharger**) sur la carte InstaGrowth.
@@ -109,6 +111,8 @@ Sous chaque publication, deux icônes rejoignent J'aime, Commenter et Partager :
 
 Dans les **messages privés**, une icône IA dans la zone de saisie lit les derniers messages et propose 3 réponses.
 
+**Vue téléphone** (onglets Messages et Insta mobile du dashboard) : par défaut, elle affiche Instagram dans un cadre étroit. L'option **Imiter un iPhone** donne la vraie version mobile, nécessaire pour publier des stories. Elle est désactivée par défaut, car Instagram voit alors ta session à la fois sur ton PC et sur un « iPhone », ce qui peut provoquer des déconnexions.
+
 **Mode fantôme stories** : une fois activé (menu InstaGrowth, popup ou Réglages), tu regardes les stories sans apparaître dans la liste des vues. Un badge « Mode fantôme » s'affiche pendant la lecture. Seul l'accusé « story vue » est bloqué : tes messages et notifications fonctionnent normalement.
 
 ### Statistiques et publications récentes
@@ -141,11 +145,15 @@ Dans **Statistiques**, tape `@nom` dans **Analyser un autre compte**, ou clique 
 
 <img src="docs/screenshots/autolike.png" alt="Vue d'ensemble de l'auto-like" width="900">
 
-L'auto-like like chaque jour des publications de ton audience cible (hashtags de ta niche, abonnés de comptes concurrents), pour te faire découvrir et générer des leads.
+L'auto-like like chaque jour des publications de ton audience cible (hashtags de ta niche, abonnés de comptes concurrents, ou **ta propre liste de prospects**), pour te faire découvrir et générer des leads.
 
 - **Vue d'ensemble** : likes du jour face à la limite, statut en direct, prochain like, file d'attente, historique sur 14 jours, derniers comptes likés. Le bouton **Liker maintenant** lance un passage immédiat.
 - **Chaque like est réel et vérifié** : il n'est compté que si Instagram le confirme.
 - Option **Notification à chaque like** : notification du système, ou petite bulle dans Instagram.
+
+<img src="docs/screenshots/autolike-settings.png" alt="Réglages de l'auto-like : cibles, liste de prospects, limites" width="900">
+
+Dans **Auto-like → Réglages**, tu choisis tes cibles : hashtags, comptes concurrents, et une **liste de prospects** (un compte par ligne). Le bouton **Importer mes leads** la remplit avec tes leads. Chaque prospect reçoit au plus un like tous les 30 jours, en priorité. Tu y règles aussi les limites, la plage horaire, les jours actifs et les notifications.
 
 <img src="docs/screenshots/autolike-liked.png" alt="Liste détaillée des comptes likés" width="900">
 
@@ -178,7 +186,9 @@ Chaque règle a sa fréquence, son nombre maximum par passage, un bouton **Lance
 <img src="docs/screenshots/leads.png" alt="Recherche de leads et mini-CRM" width="900">
 
 - **Trouver des leads** : par hashtag, parmi les abonnés d'un concurrent, les personnes qui ont liké une publication, ou en important une liste. Filtres sur les abonnés, les mots-clés de la bio, les comptes pro et la présence d'un email ou d'un téléphone.
-- **Mini-CRM** : statut (Nouveau, Liké, Chaud, Contacté, A répondu, Gagné, Perdu), **score IA** sur 100, contacts extraits de la bio, notes, export CSV.
+- **Ajouter un lead** à la main : un @compte (ou le lien de son profil), avec en option nom, email, téléphone, statut et note. Le reste (photo, abonnés, bio) est récupéré automatiquement.
+- **Bio et contacts** : récupérés automatiquement, en arrière-plan, pour les leads qui n'en ont pas encore. Le bouton **Compléter les infos** lance la récupération tout de suite.
+- **Mini-CRM** : filtres par statut avec compteurs (Nouveau, Liké, Chaud, Contacté, A répondu, Gagné, Perdu), tri, **score IA** sur 100 en couleur, icônes de contact (email, téléphone, site), notes, actions groupées sur la sélection, export CSV.
 - **Message d'approche IA** personnalisé pour chaque lead. L'envoi reste manuel, volontairement : les messages automatiques sont la première cause de blocage.
 
 ### Réglages et IA
@@ -220,6 +230,17 @@ Instagram ne propose **aucune API officielle** pour liker, ni pour lire les hash
 
 **« Non connecté à Instagram » alors que je suis connecté**
 Recharge l'onglet instagram.com et laisse-le ouvert. Depuis la v0.6.3, l'extension détecte mieux la session et reprend toute seule. Si besoin, clique sur **Réessayer maintenant**.
+
+**Instagram me déconnecte de temps en temps**
+Ouvre **Réglages & IA → Connexion Instagram** : chaque déconnexion y est enregistrée avec les actions de l'extension dans les 15 minutes précédentes. Les automatisations se mettent en pause automatiquement. Causes les plus fréquentes :
+- l'option **Imiter un iPhone** de la vue téléphone : désactive-la ;
+- des rafales de requêtes pendant des tests (recherches de leads, statistiques répétées) : espace-les ;
+- l'émulation mobile des outils de développement (DevTools) laissée active sur l'onglet Instagram.
+
+Si la liste ne montre aucune action de l'extension avant la déconnexion, celle-ci ne vient probablement pas d'elle.
+
+**Les bios et contacts des leads restent vides**
+Instagram limite souvent l'API qui donne la bio. L'extension la récupère alors en arrière-plan : quelques profils toutes les 6 minutes, ou quand tu ouvres un profil sur instagram.com. Clique sur **Compléter les infos** pour accélérer. Beaucoup de comptes n'affichent simplement aucun email ni téléphone public.
 
 **« Instagram limite temporairement cette requête (429) »**
 Instagram limite certaines requêtes. L'extension se met en pause sur cette requête pendant 15 minutes et passe par une méthode de secours quand elle existe. Attends un peu, puis réessaie.

@@ -1,7 +1,7 @@
 // Vue Insta mobile : instagram.com en version mobile (stories, reels, posts depuis le PC).
 
 import { $ } from '../ui.js';
-import { createPhone } from '../phone.js';
+import { createPhone, phoneModeNote, bindPhoneModeNote } from '../phone.js';
 
 let phone;
 
@@ -14,6 +14,7 @@ export default {
       <div class="phone-wrap">
         <div id="m-phone"></div>
         <div class="side-panel stack">
+          ${phoneModeNote()}
           <div class="card">
             <h2>Publier une story ou un reel</h2>
             <ol style="padding-left:18px;margin:0">
@@ -32,6 +33,7 @@ export default {
           </div>
         </div>
       </div>`;
+    bindPhoneModeNote(el);
     phone = createPhone($('#m-phone', el), '/', [['Accueil', '/'], ['Explorer', '/explore/'], ['Créer', '/create/select/'], ['Reels', '/reels/']]);
   },
   show([page]) {

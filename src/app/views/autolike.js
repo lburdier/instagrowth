@@ -28,6 +28,8 @@ function fillForm() {
   $('#al-enabled', el).checked = cfg.enabled;
   $('#al-hashtags', el).value = cfg.hashtags.map((h) => '#' + h).join(', ');
   $('#al-competitors', el).value = cfg.competitors.map((c) => '@' + c).join(', ');
+  $('#al-prospects', el).value = (cfg.prospects || []).map((c) => '@' + c).join('\n');
+  updateProspectCount();
   for (const k of ['dailyLimit', 'hourlyLimit', 'minDelaySec', 'maxDelaySec', 'activeStart', 'activeEnd', 'minFollowers', 'maxFollowers']) $(`#al-${k}`, el).value = cfg[k];
   for (const k of ['warmup', 'skipPrivate', 'skipVerified', 'addToLeads']) $(`#al-${k}`, el).checked = cfg[k];
   $('#al-notifyOnLike', el).value = cfg.notifyOnLike || 'off';
@@ -44,6 +46,7 @@ function readForm() {
     enabled: $('#al-enabled', el).checked,
     hashtags: list($('#al-hashtags', el).value),
     competitors: list($('#al-competitors', el).value),
+    prospects: [...new Set(list($('#al-prospects', el).value.replace(/\s+/g, '\n')).map((u) => u.toLowerCase()))],
     dailyLimit: num('dailyLimit'), hourlyLimit: num('hourlyLimit'),
     minDelaySec: num('minDelaySec'), maxDelaySec: num('maxDelaySec'),
     activeStart: num('activeStart'), activeEnd: num('activeEnd'),
@@ -58,12 +61,17 @@ function readForm() {
 
 const anyAutomation = () => Object.values(cfg.automations || {}).some((a) => a.enabled);
 
+function updateProspectCount() {
+  const n = new Set(list($('#al-prospects', el).value.replace(/\s+/g, '\n'))).size;
+  $('#al-prospects-count', el).textContent = n ? `${n} compte${n > 1 ? 's' : ''}` : '';
+}
+
 async function save(silent = false) {
   const next = readForm();
-  if (next.enabled && !next.hashtags.length && !next.competitors.length && !anyAutomation()) {
+  if (next.enabled && !next.hashtags.length && !next.competitors.length && !next.prospects.length && !anyAutomation()) {
     $('#al-enabled', el).checked = false;
     next.enabled = false;
-    toast('Ajoute des hashtags ou des concurrents (onglet Réglages), ou active une automatisation.', 'err');
+    toast('Ajoute des hashtags, des concurrents ou une liste de prospects (onglet Réglages), ou active une automatisation.', 'err');
   }
   if (!next.activeDays.length) next.activeDays = [0, 1, 2, 3, 4, 5, 6];
   cfg = next;
@@ -103,7 +111,7 @@ function renderOverview() {
     ${cfg.warmup && limit < cfg.dailyLimit ? `<p class="muted h-ico" style="margin-top:6px"><i data-i="sprout" data-s="16"></i> Warm-up actif : limite progressive (${limit}/${cfg.dailyLimit}) pendant les 7 premiers jours.</p>` : ''}`;
   $('#al-resume', el)?.addEventListener('click', async () => { await send('autolike:resume'); refresh(); });
   $('#al-now', el).onclick = (e) => busy(e.currentTarget, async () => {
-    if (!cfg.hashtags.length && !cfg.competitors.length && !(st.queue || []).length) throw new Error('Ajoute d’abord des hashtags ou des concurrents (onglet Réglages), ou lance une automatisation.');
+    if (!cfg.hashtags.length && !cfg.competitors.length && !(cfg.prospects || []).length && !(st.queue || []).length) throw new Error('Ajoute d’abord des hashtags, des concurrents ou une liste de prospects (onglet Réglages).');
     toast(await send('autolike:runNow') || 'Passage terminé');
     refresh();
   });
@@ -388,6 +396,11 @@ export default {
               <small>Les auteurs des posts récents et populaires de ces hashtags seront likés. Un hashtag ne contient pas d’espace.</small></div>
             <div class="field"><label>Comptes concurrents</label><textarea id="al-competitors" rows="2" placeholder="@concurrent1, @concurrent2"></textarea>
               <small>Le dernier post de leurs abonnés sera liké (1 like par personne).</small></div>
+            <div class="field">
+              <div class="row between" style="margin-bottom:6px"><label style="margin:0">Liste de prospects <span class="muted" id="al-prospects-count"></span></label>
+                <button class="sm" id="al-import-leads" type="button"><i data-i="target" data-s="14"></i> Importer mes leads</button></div>
+              <textarea id="al-prospects" rows="4" placeholder="@prospect1&#10;@prospect2&#10;Un compte par ligne, ou séparés par des virgules"></textarea>
+              <small>La dernière publication de chaque prospect sera likée (au plus une fois tous les 30 jours), en priorité, sans filtre d’abonnés.</small></div>
             <h3 style="margin-top:14px">Filtres</h3>
             <div class="row">
               <div class="field" style="flex:1"><label>Abonnés min</label><input type="number" id="al-minFollowers"></div>
@@ -441,6 +454,17 @@ export default {
     $('#al-enabled', el).onchange = () => save(true).then(() => toast(cfg.enabled ? 'Auto-like activé : premier passage dans la minute' : 'Auto-like désactivé'));
     $('#al-reset', el).onclick = async () => { await send('autolike:resetQueue'); toast('File vidée'); refresh(); };
     $('#al-days', el).onclick = (e) => { const b = e.target.closest('[data-day]'); if (b) b.classList.toggle('active'); };
+    $('#al-prospects', el).oninput = updateProspectCount;
+    $('#al-import-leads', el).onclick = async () => {
+      // Leads du compte actif, hors comptes privés et prospects perdus.
+      const acct = (await accountKey('x')).slice(2);
+      const leads = (await db.all('leads')).filter((l) => (!l.owners || l.owners.includes(acct)) && !l.isPrivate && l.status !== 'lost');
+      const current = list($('#al-prospects', el).value.replace(/\s+/g, '\n')).map((u) => u.toLowerCase());
+      const merged = [...new Set([...current, ...leads.map((l) => l.username.toLowerCase())])];
+      $('#al-prospects', el).value = merged.map((u) => '@' + u).join('\n');
+      updateProspectCount();
+      toast(`${merged.length - current.length} lead(s) ajouté(s) à la liste. Pense à enregistrer.`);
+    };
     // Enregistré immédiatement, sans passer par le bouton « Enregistrer ».
     $('#al-notifyOnLike', el).onchange = () => save(true).then(() => toast(cfg.notifyOnLike === 'off' ? 'Notifications de like désactivées' : 'Notifications de like activées'));
     const autoList = $('#auto-list', el);

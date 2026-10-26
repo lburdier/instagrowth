@@ -170,6 +170,14 @@ export default {
             </div>
           </div>
           <div class="card">
+            <h2 class="h-ico"><i data-i="lock"></i> Connexion Instagram</h2>
+            <p class="muted" style="margin-top:-6px">Chaque déconnexion est enregistrée avec les dernières actions de l’extension, pour en trouver la cause.</p>
+            <div id="logout-log" style="margin-bottom:18px"></div>
+            <h2 class="h-ico"><i data-i="refresh"></i> Mises à jour</h2>
+            <div class="row between" style="margin-bottom:16px">
+              <span>Version installée : <strong id="app-version"></strong> <span class="muted" id="update-status"></span></span>
+              <button class="sm" id="check-update">Vérifier les mises à jour</button>
+            </div>
             <h2 class="h-ico"><i data-i="database"></i> Données</h2>
             <p class="muted">Tout est stocké localement dans ton navigateur. Rien n’est envoyé ailleurs qu’à Instagram et au fournisseur d’IA choisi.</p>
             <div class="row">
@@ -192,6 +200,20 @@ export default {
     const b = s.brand;
     for (const k of ['niche', 'audience', 'offer', 'tone', 'language']) $(`#b-${k}`, el).value = b[k] || '';
     $$('input[name=pmode]', el).forEach((r) => { r.checked = r.value === s.publish.mode; });
+    $('#app-version', el).textContent = chrome.runtime.getManifest().version;
+    const { logoutEvents = [] } = await chrome.storage.local.get('logoutEvents');
+    $('#logout-log', el).innerHTML = logoutEvents.length ? logoutEvents.slice(0, 5).map((ev) => {
+      const counts = {};
+      for (const a of ev.actions || []) counts[a.what] = (counts[a.what] || 0) + 1;
+      const top = Object.entries(counts).sort((x, y) => y[1] - x[1]).slice(0, 4).map(([w, n]) => `${escapeHtml(w)} ×${n}`).join(' · ');
+      return `<div class="logout-item"><strong>${new Date(ev.at).toLocaleString('fr-FR')}</strong>
+        <span class="muted"> · ${ev.cause === 'explicit' ? 'session fermée' : ev.cause === 'expired' ? 'session expirée' : escapeHtml(ev.cause)}</span>
+        <div class="muted" style="font-size:12px;margin-top:2px">${top ? `Dans les 15 min précédentes : ${top}` : 'Aucune action de l’extension dans les 15 min précédentes : la déconnexion ne vient probablement pas d’elle.'}</div></div>`;
+    }).join('') : '<p class="muted">Aucune déconnexion enregistrée.</p>';
+    $('#check-update', el).onclick = (e) => busy(e.currentTarget, async () => {
+      const r = await send('update:check');
+      $('#update-status', el).textContent = r.available ? `· la version ${r.latest} est disponible (voir le bandeau en haut)` : '· tu as la dernière version';
+    });
     $('#ghost-stories', el).checked = Boolean(s.ghost?.stories);
     $('#ghost-stories', el).onchange = async (e) => {
       s = await saveSettings({ ghost: { stories: e.target.checked } });

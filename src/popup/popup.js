@@ -3,6 +3,7 @@ import { db } from '../lib/db.js';
 import { dayKey, escapeHtml, fmtNum, fmtDate } from '../lib/util.js';
 import { effectiveDailyLimit } from '../lib/limits.js';
 import { autoHydrate } from '../lib/icons.js';
+import { renderUpdateBanner } from '../lib/update.js';
 
 autoHydrate(document.body);
 
@@ -45,7 +46,9 @@ $('#ghost').onchange = (e) => saveSettings({ ghost: { stories: e.target.checked 
 
 $('#al').onchange = async (e) => {
   const s = await getSettings();
-  if (e.target.checked && !s.autolike.hashtags.length && !s.autolike.competitors.length) {
+  const hasSource = s.autolike.hashtags.length || s.autolike.competitors.length || s.autolike.prospects?.length
+    || Object.values(s.autolike.automations || {}).some((a) => a.enabled);
+  if (e.target.checked && !hasSource) {
     e.target.checked = false;
     chrome.runtime.sendMessage({ type: 'app:open', hash: 'autolike' });
     return;
@@ -55,3 +58,4 @@ $('#al').onchange = async (e) => {
 };
 
 render();
+renderUpdateBanner(document.getElementById('update-banner'), { compact: true });

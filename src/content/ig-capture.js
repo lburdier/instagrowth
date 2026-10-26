@@ -56,6 +56,14 @@
     return isSeenMutation(friendlyName || '') || isSeenMutation(friendlyFromBody(body));
   }
 
+  // En-têtes réellement envoyés par instagram.com : InstaGrowth réutilise les mêmes valeurs
+  // (au lieu de valeurs figées) pour que ses requêtes soient identiques à celles du site.
+  function rememberHeader(name, value) {
+    if (!value) return;
+    if (name === 'x-ig-app-id') document.documentElement.setAttribute('data-igg-appid', String(value));
+    if (name === 'x-asbd-id') document.documentElement.setAttribute('data-igg-asbd', String(value));
+  }
+
   function notifyBlocked() {
     window.postMessage({ source: 'igg-ghost-blocked' }, location.origin);
   }
@@ -75,40 +83,80 @@
     };
   }
 
-  /** Parcourt une réponse JSON et collecte les objets « publication » qui portent des statistiques. */
-  function collect(node, out, depth = 0) {
+  /** Profil complet (bio, catégorie, contacts publics) tel que chargé par la page. */
+  function slimUser(u) {
+    return {
+      pk: u.pk ?? u.id, id: u.id, username: u.username, full_name: u.full_name, biography: u.biography,
+      category: u.category || u.category_name || u.business_category_name, is_business: u.is_business ?? u.is_business_account ?? u.is_professional_account,
+      business_email: u.business_email || u.public_email, public_phone_number: u.public_phone_number || u.contact_phone_number || u.business_phone_number,
+      external_url: u.external_url || u.bio_links?.[0]?.url, follower_count: u.follower_count ?? u.edge_followed_by?.count,
+      following_count: u.following_count ?? u.edge_follow?.count, media_count: u.media_count ?? u.edge_owner_to_timeline_media?.count,
+      profile_pic_url: u.profile_pic_url_hd || u.hd_profile_pic_url_info?.url || u.profile_pic_url, is_private: u.is_private, is_verified: u.is_verified,
+    };
+  }
+
+  /** Parcourt une réponse JSON : publications avec statistiques + profils avec biographie. */
+  function collect(node, out, users, depth = 0) {
     if (!node || typeof node !== 'object' || depth > 40) return;
-    if (Array.isArray(node)) { for (const n of node) collect(n, out, depth + 1); return; }
+    if (Array.isArray(node)) { for (const n of node) collect(n, out, users, depth + 1); return; }
+    if (node.username && typeof node.biography === 'string') users.push(slimUser(node));
     const hasStats = node.like_count != null || node.edge_liked_by || node.edge_media_preview_like;
     if ((node.code || node.shortcode) && (node.pk || node.id) && hasStats && (node.user?.username || node.owner?.username)) {
       out.push(slim(node));
       return;
     }
-    for (const k in node) if (node[k] && typeof node[k] === 'object') collect(node[k], out, depth + 1);
+    for (const k in node) if (node[k] && typeof node[k] === 'object') collect(node[k], out, users, depth + 1);
   }
 
   const buffer = [];
+  const userBuffer = [];
   window.addEventListener('message', (e) => {
-    if (e.source === window && e.data?.source === 'igg-capture-request' && buffer.length) {
-      window.postMessage({ source: 'igg-capture', url: 'buffer', items: buffer.slice(-400) }, location.origin);
+    if (e.source === window && e.data?.source === 'igg-capture-request' && (buffer.length || userBuffer.length)) {
+      window.postMessage({ source: 'igg-capture', url: 'buffer', items: buffer.slice(-400), users: userBuffer.slice(-100) }, location.origin);
     }
   });
 
+  function emit(url, items, users) {
+    if (!items.length && !users.length) return;
+    buffer.push(...items);
+    userBuffer.push(...users);
+    if (buffer.length > 600) buffer.splice(0, buffer.length - 600);
+    if (userBuffer.length > 200) userBuffer.splice(0, userBuffer.length - 200);
+    window.postMessage({ source: 'igg-capture', url: String(url).slice(0, 160), items, users }, location.origin);
+  }
+
   function handle(url, text) {
-    if (typeof text !== 'string' || text.length > 4e6 || !text.includes('code') || !/like_count|edge_liked_by/.test(text)) return;
+    if (typeof text !== 'string' || text.length > 4e6) return;
+    if (!(text.includes('code') && /like_count|edge_liked_by/.test(text)) && !text.includes('"biography"')) return;
     const chunks = text.replace(/^for \(;;\);/, '').split('\n').filter(Boolean);
     const items = [];
+    const users = [];
     for (const chunk of chunks) {
-      try { collect(JSON.parse(chunk), items); } catch { /* réponse non JSON */ }
+      try { collect(JSON.parse(chunk), items, users); } catch { /* réponse non JSON */ }
     }
-    if (!items.length) return;
-    buffer.push(...items);
-    if (buffer.length > 600) buffer.splice(0, buffer.length - 600);
-    window.postMessage({ source: 'igg-capture', url: String(url).slice(0, 160), items }, location.origin);
+    emit(url, items, users);
   }
+
+  // Données intégrées au HTML au premier chargement (profil ouvert directement par son adresse).
+  function scanEmbedded() {
+    const items = [];
+    const users = [];
+    for (const s of document.querySelectorAll('script[type="application/json"]')) {
+      const t = s.textContent;
+      if (!t || t.length > 3e6 || !(t.includes('"biography"') || t.includes('like_count'))) continue;
+      try { collect(JSON.parse(t), items, users); } catch { /* bloc illisible */ }
+    }
+    emit('page', items, users);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', scanEmbedded, { once: true });
+  else scanEmbedded();
 
   const origFetch = window.fetch;
   window.fetch = function (input, init) {
+    try {
+      rememberHeader('x-ig-app-id', headerValue(init?.headers, 'x-ig-app-id'));
+      rememberHeader('x-asbd-id', headerValue(init?.headers, 'x-asbd-id'));
+    } catch { /* ignore */ }
     try {
       const url = typeof input === 'string' ? input : input?.url || '';
       if (isStorySeen(url, init?.body, headerValue(init?.headers, 'x-fb-friendly-name'))) {
@@ -133,7 +181,9 @@
     return open.apply(this, arguments);
   };
   XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
-    if (String(name).toLowerCase() === 'x-fb-friendly-name') this.__iggName = String(value);
+    const n = String(name).toLowerCase();
+    if (n === 'x-fb-friendly-name') this.__iggName = String(value);
+    rememberHeader(n, value);
     return setHeader.apply(this, arguments);
   };
   XMLHttpRequest.prototype.send = function (body) {

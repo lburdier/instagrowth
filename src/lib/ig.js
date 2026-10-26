@@ -166,6 +166,19 @@ async function setCooldown(key, ms = COOLDOWN_MS) {
 
 const hhmm = (t) => new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 
+// Dernières actions de l'extension vers Instagram (pour comprendre une éventuelle déconnexion).
+const activity = [];
+export function recordActivity(what, status = '') {
+  activity.push({ at: Date.now(), what, status });
+  if (activity.length > 40) activity.shift();
+  chrome.storage.session?.set({ igActivity: activity }).catch(() => {});
+}
+
+export async function recentActivity() {
+  if (activity.length) return [...activity];
+  return (await chrome.storage.session?.get('igActivity'))?.igActivity || [];
+}
+
 async function request(path, { method = 'GET', body, headers = {}, skipThrottle = false, raw = false } = {}) {
   const key = endpointKey(path);
   const until = await cooldownUntil(key);
@@ -190,6 +203,7 @@ async function request(path, { method = 'GET', body, headers = {}, skipThrottle 
 
   let data = null;
   try { data = JSON.parse(res.text); } catch { data = res.text; }
+  recordActivity(`${method} ${key}`, res.status);
 
   if (!raw && typeof data === 'string' && res.status >= 200 && res.status < 300) {
     // Instagram renvoie parfois une page HTML en 200 sur une route d'API disparue : ce n'est pas un succès.
@@ -318,33 +332,84 @@ async function profileFromPage(username) {
     html.match(new RegExp(`<meta[^>]+content="([^"]*)"[^>]*(?:property|name)="${prop}"`, 'i')) || [])[1] || '');
   const counts = countsFromDescription(meta('og:description') || meta('description'));
   if (counts.length < 3) throw new IgError(`Profil @${username} introuvable`, { kind: 'notfound', status: 404 });
-  // La page embarque aussi d'autres comptes (toi, suggestions…) : les indicateurs (privé,
-  // certifié, bio…) ne sont lus qu'autour de l'objet JSON du profil visé.
+  // La page embarque aussi d'autres comptes (toi, suggestions…). Les informations (bio, catégorie,
+  // compte pro, privé…) ne sont lues QUE dans l'objet JSON dont « username » est le profil visé.
+  const user = profileObjectInPage(html, username) || {};
   const nameRe = username.replace(/[.]/g, '\\.');
-  const at = html.search(new RegExp(`"username":"${nameRe}"`, 'i'));
-  const around = at >= 0 ? html.slice(Math.max(0, at - 2000), at + 2000) : '';
-  const json = (re) => { const m = around.match(re); try { return m ? JSON.parse(`"${m[1]}"`) : ''; } catch { return ''; } };
-  const pk = (html.match(new RegExp(`"id":"(\\d+)","username":"${nameRe}"`, 'i')) || html.match(/"profile_id":"(\d+)"/) ||
-    html.match(/profilePage_(\d+)/) || [])[1] || '';
+  const pk = String(user.id || user.pk || (html.match(new RegExp(`"id":"(\\d+)","username":"${nameRe}"`, 'i')) || [])[1] || '');
   const title = meta('og:title');
   return {
     pk,
     username,
-    fullName: title.includes('(@') ? title.split('(@')[0].trim() : '',
-    pic: meta('og:image'),
-    isPrivate: /"is_private":true/.test(around),
-    isVerified: /"is_verified":true/.test(around),
-    bio: json(/"biography":"((?:[^"\\]|\\.)*)"/),
+    fullName: user.full_name || (title.includes('(@') ? title.split('(@')[0].trim() : ''),
+    pic: user.profile_pic_url || meta('og:image'),
+    isPrivate: Boolean(user.is_private),
+    isVerified: Boolean(user.is_verified),
+    bio: user.biography || '',
     followers: counts[0],
     following: counts[1],
     posts: counts[2],
-    isBusiness: /"is_business_account":true|"is_professional_account":true/.test(around),
-    category: json(/"category_name":"((?:[^"\\]|\\.)*)"/),
-    publicEmail: json(/"business_email":"((?:[^"\\]|\\.)*)"/),
-    publicPhone: '',
-    externalUrl: json(/"external_url":"((?:[^"\\]|\\.)*)"/),
+    isBusiness: Boolean(user.is_business_account || user.is_professional_account),
+    category: user.category_name || user.category || '',
+    publicEmail: user.business_email || user.public_email || '',
+    publicPhone: user.business_phone_number || user.public_phone_number || '',
+    externalUrl: user.external_url || '',
     source: 'page',
   };
+}
+
+/** Fin de l'objet JSON qui commence à `start` (accolades équilibrées, chaînes ignorées), ou -1. */
+function objectEnd(text, start, maxLen = 300000) {
+  let depth = 0;
+  let inStr = false;
+  const stop = Math.min(text.length, start + maxLen);
+  for (let i = start; i < stop; i++) {
+    const c = text[i];
+    if (inStr) {
+      if (c === '\\') i++;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') inStr = true;
+    else if (c === '{') depth++;
+    else if (c === '}' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Cherche, dans le JSON embarqué de la page, l'objet utilisateur dont username === celui demandé
+ * et qui porte une biographie. Renvoie null si aucun objet sûr n'est trouvé (mieux vaut rien
+ * qu'afficher les informations d'un autre compte).
+ */
+export function profileObjectInPage(html, username) {
+  const needle = `"username":"${username}"`;
+  let from = 0;
+  for (let n = 0; n < 12; n++) {
+    const at = html.indexOf(needle, from);
+    if (at < 0) break;
+    from = at + needle.length;
+    // On remonte d'accolade en accolade pour trouver les objets qui englobent l'occurrence.
+    let pos = at;
+    for (let tries = 0; tries < 80; tries++) {
+      pos = html.lastIndexOf('{', pos - 1);
+      if (pos < 0 || at - pos > 60000) break;
+      const end = objectEnd(html, pos);
+      if (end < at) continue;
+      let obj;
+      try { obj = JSON.parse(html.slice(pos, end + 1)); } catch { continue; }
+      if (obj && typeof obj === 'object' && obj.username === username && 'biography' in obj) return obj;
+      if (obj && typeof obj === 'object' && obj.username && obj.username !== username) break; // objet d'un autre compte
+    }
+  }
+  return null;
+}
+
+/** Profil capté récemment sur une page Instagram (bio, contacts), ou null. */
+export async function capturedProfile(username, maxAgeMs = 7 * 86400000) {
+  const { capturedUsers = {} } = await chrome.storage.local.get('capturedUsers');
+  const c = capturedUsers[String(username).toLowerCase()];
+  return c && Date.now() - c.at < maxAgeMs ? { ...normalizeUser(c.user), source: 'capture' } : null;
 }
 
 export async function profileByUsername(username) {
@@ -353,7 +418,11 @@ export async function profileByUsername(username) {
   } catch (e) {
     // Profil réellement inexistant ou session perdue : inutile d'insister.
     if (e.kind === 'auth' || (e.kind === 'notfound' && !String(e.message).includes('['))) throw e;
-    return profileFromPage(username);
+    const captured = await capturedProfile(username);
+    if (captured?.followers != null) return captured;
+    const page = await profileFromPage(username);
+    // La page donne des compteurs à jour ; la capture apporte bio et contacts.
+    return captured ? { ...page, ...Object.fromEntries(Object.entries(captured).filter(([, v]) => v !== '' && v != null)), followers: page.followers ?? captured.followers } : page;
   }
 }
 
@@ -543,9 +612,17 @@ export async function isLiked(pk) {
 }
 
 /** Like via la page de la publication, dans un onglet épinglé d'arrière-plan réutilisé. */
-export async function likeViaPage(code, pk = '') {
-  if (!code) throw new IgError('Code de publication manquant pour liker via la page', { kind: 'unknown' });
-  const url = `${BASE}/p/${code}/`;
+// Onglet de travail (épinglé, en arrière-plan) partagé par les likes « par la page » et la complétion
+// des profils. Un verrou garantit qu'une seule opération l'utilise à la fois.
+let workerLock = Promise.resolve();
+function withWorker(fn) {
+  const run = workerLock.then(fn, fn);
+  workerLock = run.catch(() => {});
+  return run;
+}
+
+async function openInWorker(url) {
+  recordActivity(`page ${url.replace(BASE, '')}`);
   if (likeTabId == null) likeTabId = (await chrome.storage.session.get('likeTabId')).likeTabId ?? null;
   let tab = likeTabId != null ? await chrome.tabs.get(likeTabId).catch(() => null) : null;
   if (tab) await chrome.tabs.update(tab.id, { url });
@@ -553,6 +630,30 @@ export async function likeViaPage(code, pk = '') {
   likeTabId = tab.id;
   await chrome.storage.session.set({ likeTabId });
   await waitComplete(tab.id);
+  return tab;
+}
+
+/** Ouvre le profil dans l'onglet de travail et attend que la page livre sa bio (captée par ig-capture.js). */
+export function visitProfile(username, timeout = 12000) {
+  return withWorker(async () => {
+    const started = Date.now();
+    await openInWorker(`${BASE}/${encodeURIComponent(username)}/`);
+    while (Date.now() - started < timeout) {
+      const c = await capturedProfile(username, Date.now() - started + 5000);
+      if (c) return c;
+      await sleep(800);
+    }
+    return null;
+  });
+}
+
+export function likeViaPage(code, pk = '') {
+  return withWorker(() => likeViaPageLocked(code, pk));
+}
+
+async function likeViaPageLocked(code, pk) {
+  if (!code) throw new IgError('Code de publication manquant pour liker via la page', { kind: 'unknown' });
+  const tab = await openInWorker(`${BASE}/p/${code}/`);
   await sleep(2500 + rand(0, 1500));
   let last = null;
   for (let i = 0; i < 4; i++) {

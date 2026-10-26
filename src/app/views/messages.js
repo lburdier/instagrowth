@@ -1,7 +1,7 @@
 // Vue Messages : DM Instagram dans un cadre mobile + réponses rapides + assistant IA.
 
 import { toast, busy, $ } from '../ui.js';
-import { createPhone } from '../phone.js';
+import { createPhone, phoneModeNote, bindPhoneModeNote } from '../phone.js';
 import { getSettings, saveSettings } from '../../lib/store.js';
 import { complete } from '../../lib/ai.js';
 import { escapeHtml, uid } from '../../lib/util.js';
@@ -72,6 +72,7 @@ export default {
       <div class="phone-wrap">
         <div id="dm-phone"></div>
         <div class="side-panel stack">
+          ${phoneModeNote()}
           <div id="pending"></div>
           <div class="card">
             <h2 class="h-ico"><i data-i="sparkle"></i> Assistant de réponse</h2>
@@ -93,6 +94,7 @@ export default {
         </div>
       </div>`;
 
+    bindPhoneModeNote(el);
     phone = createPhone($('#dm-phone', el), '/direct/inbox/', [['Messages', '/direct/inbox/'], ['Demandes', '/direct/requests/'], ['Notifications', '/accounts/activity/']]);
 
     $('#ai-reply', el).onclick = (e) => busy(e.currentTarget, aiReplies);

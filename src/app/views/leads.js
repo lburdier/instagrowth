@@ -11,6 +11,7 @@ let el;
 let leads = [];
 let selected = new Set();
 let sort = { key: 'addedAt', dir: -1 };
+let statusFilter = '';
 let source = 'hashtag';
 
 export const STATUSES = {
@@ -48,7 +49,7 @@ function renderCounts() {
 
 function filtered() {
   const q = $('#lead-q', el).value.toLowerCase();
-  const st = $('#lead-status', el).value;
+  const st = statusFilter;
   return leads
     .filter((l) => (!st || l.status === st) && (!q || `${l.username} ${l.fullName} ${l.bio} ${l.category} ${l.source} ${l.notes}`.toLowerCase().includes(q)))
     .sort((a, b) => {
@@ -57,31 +58,56 @@ function filtered() {
     });
 }
 
+const scoreClass = (s) => (s >= 75 ? 'high' : s >= 50 ? 'mid' : 'low');
+
+function contactIcons(l) {
+  const out = [];
+  if (l.email) out.push(`<a class="lead-contact" href="mailto:${escapeHtml(l.email)}" title="${escapeHtml(l.email)}">${icon('mail', 14)}</a>`);
+  if (l.phone) out.push(`<span class="lead-contact" title="${escapeHtml(l.phone)}">${icon('phoneCall', 14)}</span>`);
+  if (l.externalUrl) out.push(`<a class="lead-contact" href="${escapeHtml(l.externalUrl)}" target="_blank" title="${escapeHtml(l.externalUrl)}">${icon('link', 14)}</a>`);
+  return out.join('');
+}
+
+function renderStatusChips() {
+  const counts = {};
+  for (const l of leads) counts[l.status] = (counts[l.status] || 0) + 1;
+  $('#lead-status-chips', el).innerHTML = [['', 'Tous', leads.length], ...Object.entries(STATUSES).map(([k, v]) => [k, v, counts[k] || 0])]
+    .filter(([k, , n]) => !k || n)
+    .map(([k, v, n]) => `<button class="status-chip s-${k || 'all'} ${statusFilter === k ? 'active' : ''}" data-status="${k}">${v}<span>${n}</span></button>`).join('');
+}
+
 function renderTable() {
   const rows = filtered();
   const body = $('#lead-tbody', el);
+  renderStatusChips();
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="9" class="empty">Aucun lead. Lance une recherche ci-dessus ou active l’auto-like avec « ajouter aux leads ».</td></tr>`;
+    body.innerHTML = `<tr><td colspan="7" class="empty">${leads.length ? 'Aucun lead ne correspond à ces filtres.' : 'Aucun lead. Lance une recherche ci-dessus ou active l’auto-like avec « ajouter aux leads ».'}</td></tr>`;
   } else {
     body.innerHTML = rows.slice(0, 500).map((l) => `
-      <tr data-pk="${l.pk}">
-        <td><input type="checkbox" class="sel" ${selected.has(l.pk) ? 'checked' : ''}></td>
-        <td><div class="user-cell"><div class="avatar" style="background-image:url('${escapeHtml(l.pic)}')"></div>
-          <div><a href="https://www.instagram.com/${encodeURIComponent(l.username)}/" target="_blank"><strong>@${escapeHtml(l.username)}</strong></a>${l.isVerified ? ' ' + icon('verified', 14, 'verified') : ''}${l.isBusiness ? ' <span class="badge">Pro</span>' : ''}
-          <br><small>${escapeHtml(l.fullName || '')}</small></div></div></td>
-        <td>${fmtNum(l.followers)}</td>
-        <td class="bio-cell" title="${escapeHtml(l.bio)}">${escapeHtml(l.category ? `[${l.category}] ` : '')}${escapeHtml(l.bio)}</td>
-        <td style="font-size:12px">${l.email ? `<a href="mailto:${escapeHtml(l.email)}">${escapeHtml(l.email)}</a><br>` : ''}${escapeHtml(l.phone || '')}${!l.email && !l.phone ? '<span class="muted">—</span>' : ''}</td>
-        <td style="font-size:12px">${escapeHtml(l.source)}<br><small>${fmtDate(l.addedAt, false)}</small></td>
-        <td title="${escapeHtml(l.scoreReason || '')}">${l.score != null ? `<strong>${l.score}</strong>/100` : '<span class="muted">—</span>'}</td>
-        <td><select class="status">${Object.entries(STATUSES).map(([k, v]) => `<option value="${k}" ${l.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
-        <td><div class="row" style="flex-wrap:nowrap;gap:4px">
-          <button class="sm" data-act="dm" title="Message d’approche IA">${icon('sparkle', 14)} DM</button>
-          <button class="sm icon-btn" data-act="note" title="Notes">${icon('note', 16)}</button>
-          <button class="sm ghost icon-btn" data-act="del" title="Supprimer">${icon('trash', 16)}</button></div></td>
+      <tr data-pk="${l.pk}" class="${selected.has(l.pk) ? 'selected' : ''}">
+        <td class="col-check"><input type="checkbox" class="sel" ${selected.has(l.pk) ? 'checked' : ''}></td>
+        <td><div class="user-cell">
+          <a class="avatar" href="https://www.instagram.com/${encodeURIComponent(l.username)}/" target="_blank" style="background-image:url('${escapeHtml(l.pic)}')"></a>
+          <div class="lead-id">
+            <div class="lead-name"><a href="https://www.instagram.com/${encodeURIComponent(l.username)}/" target="_blank">@${escapeHtml(l.username)}</a>
+              ${l.isVerified ? icon('verified', 14, 'verified') : ''}${l.isBusiness ? '<span class="tag">Pro</span>' : ''}</div>
+            <div class="lead-meta">${l.fullName ? `${escapeHtml(l.fullName)} · ` : ''}<strong>${fmtNum(l.followers)}</strong> abonnés ${contactIcons(l)}</div>
+          </div></div></td>
+        <td class="col-bio"><div class="lead-bio" title="${escapeHtml(l.bio)}">${l.category ? `<span class="tag">${escapeHtml(l.category)}</span> ` : ''}${l.bio ? escapeHtml(l.bio) : (l.enrichAttempts || 0) < 3 ? '<span class="muted pending-bio">Bio en cours de récupération…</span>' : '<span class="muted">Pas de bio</span>'}</div></td>
+        <td class="col-source"><div class="lead-source">${escapeHtml(l.source)}</div><small class="muted">${fmtDate(l.addedAt, false)}</small></td>
+        <td title="${escapeHtml(l.scoreReason || '')}">${l.score != null ? `<span class="score-pill ${scoreClass(l.score)}">${l.score}</span>` : '<span class="muted">—</span>'}</td>
+        <td><select class="status status-select s-${l.status}">${Object.entries(STATUSES).map(([k, v]) => `<option value="${k}" ${l.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select></td>
+        <td><div class="lead-actions">
+          <button class="icon-btn" data-act="dm" title="Message d’approche IA">${icon('sparkle', 16)}</button>
+          <button class="icon-btn ${l.notes ? 'has-note' : ''}" data-act="note" title="${l.notes ? escapeHtml(l.notes) : 'Ajouter une note'}">${icon('note', 16)}</button>
+          <button class="icon-btn danger" data-act="del" title="Supprimer">${icon('trash', 16)}</button></div></td>
       </tr>`).join('');
   }
-  $('#lead-shown', el).textContent = `${rows.length} lead(s)${rows.length > 500 ? ' — 500 affichés' : ''} · ${selected.size} sélectionné(s)`;
+  $('#lead-shown', el).textContent = `${rows.length} lead${rows.length > 1 ? 's' : ''}${rows.length > 500 ? ' (500 affichés)' : ''}`;
+  const bar = $('#lead-selbar', el);
+  bar.hidden = !selected.size;
+  $('#lead-selcount', el).textContent = `${selected.size} sélectionné${selected.size > 1 ? 's' : ''}`;
+  $('#sel-all', el).checked = rows.length > 0 && rows.every((l) => selected.has(l.pk));
 }
 
 async function updateLead(pk, patch) {
@@ -221,22 +247,39 @@ export default {
       </div>
 
       <div class="card">
-        <div class="row" style="margin-bottom:12px">
-          <input type="search" id="lead-q" placeholder="Rechercher (nom, bio, source, notes)…" style="max-width:300px">
-          <select id="lead-status" style="width:auto"><option value="">Tous les statuts</option>${Object.entries(STATUSES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select>
+        <div class="lead-toolbar">
+          <div class="search-account" style="flex:1;max-width:340px"><span class="search-ico"><i data-i="search" data-s="16"></i></span>
+            <input type="search" id="lead-q" placeholder="Rechercher un nom, une bio, une note…"></div>
+          <select id="lead-sort" style="width:auto">
+            <option value="addedAt:-1">Plus récents</option><option value="score:-1">Meilleur score</option>
+            <option value="followers:-1">Plus d’abonnés</option><option value="followers:1">Moins d’abonnés</option><option value="status:1">Statut</option>
+          </select>
           <span class="spacer"></span>
+          <button class="primary" id="lead-add"><i data-i="userPlus" data-s="16"></i> Ajouter un lead</button>
+          <button id="lead-enrich" title="Récupère la bio et les contacts des leads qui n’en ont pas"><i data-i="refresh" data-s="16"></i> Compléter les infos</button>
           <button id="lead-score"><i data-i="sparkle" data-s="16"></i> Scorer avec l’IA</button>
           <button id="lead-fb" title="Vérifie qui t’a suivi après un like"><i data-i="refresh" data-s="16"></i> Follow-backs</button>
           <button id="lead-export"><i data-i="download" data-s="16"></i> CSV</button>
-          <button class="danger" id="lead-del">Supprimer la sélection</button>
         </div>
-        <small class="muted" id="lead-shown"></small>
-        <div class="table-wrap" style="margin-top:8px;max-height:640px">
-          <table>
+        <div class="row" style="justify-content:space-between;margin:12px 0 4px">
+          <div class="status-chips" id="lead-status-chips"></div>
+          <small class="muted" id="lead-shown"></small>
+        </div>
+        <div class="lead-selbar" id="lead-selbar" hidden>
+          <strong id="lead-selcount"></strong>
+          <button class="sm" id="lead-sel-score"><i data-i="sparkle" data-s="14"></i> Scorer</button>
+          <button class="sm" id="lead-sel-enrich"><i data-i="refresh" data-s="14"></i> Compléter les infos</button>
+          <button class="sm" id="lead-sel-export"><i data-i="download" data-s="14"></i> Exporter</button>
+          <button class="sm danger" id="lead-del"><i data-i="trash" data-s="14"></i> Supprimer</button>
+          <span class="spacer"></span>
+          <button class="sm ghost" id="lead-sel-clear">Désélectionner</button>
+        </div>
+        <div class="table-wrap lead-table-wrap" style="margin-top:8px;max-height:680px">
+          <table class="lead-table">
             <thead><tr>
-              <th><input type="checkbox" id="sel-all"></th>
-              <th data-sort="username">Profil</th><th data-sort="followers">Abonnés</th><th>Bio</th><th>Contact</th>
-              <th data-sort="addedAt">Source</th><th data-sort="score">Score</th><th data-sort="status">Statut</th><th>Actions</th>
+              <th class="col-check"><input type="checkbox" id="sel-all"></th>
+              <th>Profil</th><th class="col-bio">Bio</th>
+              <th class="col-source" data-sort="addedAt">Source</th><th data-sort="score">Score</th><th data-sort="status">Statut</th><th></th>
             </tr></thead>
             <tbody id="lead-tbody"></tbody>
           </table>
@@ -259,6 +302,22 @@ export default {
         <small class="muted">Envoi manuel volontaire : les DM automatisés sont la 1re cause de blocage de compte.</small>
       </dialog>
 
+      <dialog id="add-dialog">
+        <h2>Ajouter un lead</h2>
+        <form id="add-form">
+          <div class="field"><label>Compte Instagram</label><input type="text" id="add-username" placeholder="@nom_du_compte ou lien du profil" required autocomplete="off">
+            <small>InstaGrowth récupère automatiquement la photo, les abonnés, la bio et les contacts publics.</small></div>
+          <div class="grid g2" style="gap:12px">
+            <div class="field"><label>Nom (optionnel)</label><input type="text" id="add-name"></div>
+            <div class="field"><label>Statut</label><select id="add-status">${Object.entries(STATUSES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+            <div class="field"><label>Email (optionnel)</label><input type="text" id="add-email" placeholder="contact@exemple.fr"></div>
+            <div class="field"><label>Téléphone (optionnel)</label><input type="text" id="add-phone"></div>
+          </div>
+          <div class="field"><label>Note (optionnel)</label><textarea id="add-notes" rows="3" placeholder="Contexte, besoin, prochaine étape…"></textarea></div>
+          <div class="row"><span class="spacer"></span><button type="button" id="add-cancel">Annuler</button><button class="primary" type="submit" id="add-save">Ajouter</button></div>
+        </form>
+      </dialog>
+
       <dialog id="note-dialog">
         <h2>Notes</h2>
         <textarea id="note-text" rows="6"></textarea>
@@ -276,7 +335,45 @@ export default {
     $('#lead-start', el).onclick = (e) => busy(e.currentTarget, startSearch);
     $('#lead-stop', el).onclick = () => send('leads:stop');
     $('#lead-q', el).oninput = renderTable;
-    $('#lead-status', el).onchange = renderTable;
+    $('#lead-sort', el).onchange = (e) => {
+      const [key, dir] = e.target.value.split(':');
+      sort = { key, dir: Number(dir) };
+      renderTable();
+    };
+    $('#lead-status-chips', el).onclick = (e) => {
+      const chip = e.target.closest('[data-status]');
+      if (!chip) return;
+      statusFilter = chip.dataset.status;
+      renderTable();
+    };
+    $('#lead-sel-score', el).onclick = (e) => busy(e.currentTarget, aiScore);
+    $('#lead-sel-export', el).onclick = () => $('#lead-export', el).click();
+    $('#lead-sel-clear', el).onclick = () => { selected.clear(); renderTable(); };
+    const enrich = async (pks) => {
+      if (!pks.length) return toast('Tous ces leads ont déjà leur bio.');
+      toast(`Récupération des infos de ${Math.min(10, pks.length)} lead(s)…`);
+      const n = await send('leads:enrich', { pks: pks.slice(0, 10) });
+      await reload();
+      toast(n ? `${n} profil(s) complété(s)` : 'Aucune nouvelle info trouvée pour l’instant : nouvel essai automatique plus tard.');
+    };
+    $('#lead-enrich', el).onclick = (e) => busy(e.currentTarget, () => enrich(filtered().filter((l) => !l.bio).map((l) => l.pk)));
+    $('#lead-sel-enrich', el).onclick = (e) => busy(e.currentTarget, () => enrich([...selected]));
+    const addDlg = $('#add-dialog', el);
+    $('#lead-add', el).onclick = () => { $('#add-form', el).reset(); addDlg.showModal(); $('#add-username', el).focus(); };
+    $('#add-cancel', el).onclick = () => addDlg.close();
+    $('#add-form', el).onsubmit = (e) => {
+      e.preventDefault();
+      busy($('#add-save', el), async () => {
+        const r = await send('leads:addManual', {
+          username: $('#add-username', el).value,
+          fields: { fullName: $('#add-name', el).value.trim(), email: $('#add-email', el).value.trim(), phone: $('#add-phone', el).value.trim(),
+            notes: $('#add-notes', el).value.trim(), status: $('#add-status', el).value },
+        });
+        addDlg.close();
+        await reload();
+        toast(`@${r.username} ajouté à tes leads`);
+      });
+    };
     $('#lead-score', el).onclick = (e) => busy(e.currentTarget, aiScore);
     $('#lead-fb', el).onclick = (e) => busy(e.currentTarget, async () => { await send('leads:checkFollowBacks'); await reload(); toast('Follow-backs vérifiés'); });
     $('#lead-export', el).onclick = () => {
@@ -308,7 +405,12 @@ export default {
       const pk = e.target.closest('tr')?.dataset.pk;
       if (!pk) return;
       if (e.target.classList.contains('sel')) { e.target.checked ? selected.add(pk) : selected.delete(pk); renderTable(); }
-      if (e.target.classList.contains('status')) { await updateLead(pk, { status: e.target.value }); renderCounts(); }
+      if (e.target.classList.contains('status')) {
+        e.target.className = `status status-select s-${e.target.value}`;
+        await updateLead(pk, { status: e.target.value });
+        renderCounts();
+        renderStatusChips();
+      }
     };
     tbody.onclick = async (e) => {
       const act = e.target.closest('button')?.dataset.act;

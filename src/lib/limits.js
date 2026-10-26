@@ -10,8 +10,8 @@ export const LIMITS = {
     likesPerHour: 40,
     minDelaySec: 30,
     // Lectures API (profils, feeds, hashtags) : délai mini entre deux requêtes.
-    readGapMs: 1500,
-    readsPerHour: 180,
+    readGapMs: 2500,
+    readsPerHour: 120,
   },
   presets: {
     prudent: { label: 'Prudent', daily: 60, hourly: 15, minDelaySec: 60, maxDelaySec: 180 },
