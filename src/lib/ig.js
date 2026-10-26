@@ -563,6 +563,15 @@ export async function friendship(userId) {
   return request(`/api/v1/friendships/show/${userId}/`);
 }
 
+// --- Messages privés -----------------------------------------------------------
+
+/** Conversation déjà existante avec ce compte (sans en créer) : chemin web « /direct/t/… » ou null. */
+export async function dmThreadPath(userId) {
+  const data = await request(`/api/v1/direct_v2/threads/get_by_participants/?recipient_users=${encodeURIComponent(JSON.stringify([String(userId)]))}`);
+  const id = data?.thread?.thread_v2_id || data?.thread?.thread_id;
+  return id ? `/direct/t/${id}/` : null;
+}
+
 // --- Likes ------------------------------------------------------------------
 // Instagram change régulièrement l'adresse utilisée pour liker. On essaie les
 // routes connues ; si toutes renvoient 404, on like « comme un humain » : la

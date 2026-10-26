@@ -1,6 +1,6 @@
 // Vue Messages : DM Instagram dans un cadre mobile + réponses rapides + assistant IA.
 
-import { toast, busy, $ } from '../ui.js';
+import { toast, busy, send, $ } from '../ui.js';
 import { TUTOS } from '../tutorial.js';
 import { createPhone, phoneModeNote, bindPhoneModeNote } from '../phone.js';
 import { getSettings, saveSettings } from '../../lib/store.js';
@@ -63,6 +63,14 @@ function renderPending() {
     <div class="row"><button class="sm primary" id="p-ins">Insérer dans la conversation</button><button class="sm" id="p-clear">Effacer</button></div></div>`;
   $('#p-ins', el).onclick = () => phone.insert(text);
   $('#p-clear', el).onclick = () => { sessionStorage.removeItem('pendingDm'); renderPending(); };
+}
+
+/** Ouvre la conversation avec ce compte dans le téléphone (ig.me et /m/… ne marchent pas sur le web). */
+async function openConversation(username) {
+  const name = username.replace(/^@/, '');
+  const { path, thread } = await send('ig:dmPath', { username: name }).catch(() => ({ path: `/${name}/`, thread: false }));
+  phone.go(path);
+  if (!thread) toast(`Pas encore de conversation avec @${name} : touche « Écrire » sur son profil, puis « Insérer dans la conversation ».`);
 }
 
 export default {
@@ -128,8 +136,6 @@ export default {
   },
   show([username]) {
     renderPending();
-    // Route directe d'Instagram (celle vers laquelle redirige ig.me) : ig.me affiche une
-    // page d'erreur Meta dès que le User-Agent n'est pas celui d'un mobile.
-    if (username) phone.go(`/m/${encodeURIComponent(username.replace(/^@/, ''))}/`);
+    if (username) openConversation(username);
   },
 };

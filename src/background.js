@@ -1091,6 +1091,19 @@ const handlers = {
     return { media, owner, recent: recent.filter((p) => p.pk !== media.pk) };
   },
   async 'ai:complete'({ opts }) { return complete(opts); },
+  /** Où ouvrir une conversation avec ce compte : le fil existant, sinon son profil (bouton « Écrire »). */
+  async 'ig:dmPath'({ username }) {
+    const name = username.replace(/^@/, '');
+    const profilePath = { path: `/${name}/`, thread: false };
+    try {
+      const lead = (await db.all('leads')).find((l) => l.username?.toLowerCase() === name.toLowerCase());
+      const pk = lead?.pk || (await ig.profileByUsername(name)).pk;
+      const path = pk && await ig.dmThreadPath(pk);
+      return path ? { path, thread: true } : profilePath;
+    } catch {
+      return profilePath;
+    }
+  },
   async 'ig:me'() { return ig.me(); },
   async 'ig:stats'({ username }) {
     const self = !username;
