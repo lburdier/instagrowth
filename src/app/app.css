@@ -391,3 +391,8 @@ a.btn.icon-btn:hover { background: var(--hover); }
 .posts-table tbody tr { cursor: pointer; }
 .pt-thumb { width: 44px; height: 55px; border-radius: 6px; background: var(--panel-2) center/cover; flex-shrink: 0; }
 .pt-caption { margin-top: 4px; max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
+
+/* Automatisations */
+.auto-card { transition: box-shadow .15s; }
+.auto-card.on { box-shadow: inset 3px 0 0 var(--accent); }
+.auto-ico { width: 38px; height: 38px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; background: var(--bg); color: var(--accent); flex-shrink: 0; }

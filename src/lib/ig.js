@@ -59,6 +59,7 @@ function classify(status, body) {
 // --- Pont vers un onglet instagram.com ---------------------------------------
 
 let bridgeTabId = null;
+let likeTabId = null;
 
 async function ping(tabId) {
   try {
@@ -81,7 +82,7 @@ async function ready(tab) {
   }
 }
 
-function waitComplete(tabId, timeout = 20000) {
+export function waitComplete(tabId, timeout = 20000) {
   return new Promise((resolve) => {
     const done = () => { chrome.tabs.onUpdated.removeListener(listener); clearTimeout(t); resolve(); };
     const listener = (id, info) => { if (id === tabId && info.status === 'complete') done(); };
@@ -97,7 +98,8 @@ async function bridgeTab() {
     bridgeTabId = null;
   }
   const tabs = (await chrome.tabs.query({ url: `${BASE}/*` })).sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0));
-  for (const t of tabs) if (await ready(t)) return (bridgeTabId = t.id);
+  // L'onglet « likes » (navigation de post en post) n'est jamais utilisé comme pont réseau.
+  for (const t of tabs) if (t.id !== likeTabId && (await ready(t))) return (bridgeTabId = t.id);
   // Aucun onglet Instagram exploitable : on en ouvre un épinglé en arrière-plan.
   const t = await chrome.tabs.create({ url: `${BASE}/`, active: false, pinned: true });
   await waitComplete(t.id);
@@ -441,8 +443,79 @@ export async function friendship(userId) {
   return request(`/api/v1/friendships/show/${userId}/`);
 }
 
-export async function likeMedia(mediaPk) {
-  return request(`/api/v1/web/likes/${mediaPk}/like/`, { method: 'POST', skipThrottle: false });
+// --- Likes ------------------------------------------------------------------
+// Instagram change régulièrement l'adresse utilisée pour liker. On essaie les
+// routes connues ; si toutes renvoient 404, on like « comme un humain » : la
+// publication est ouverte dans un onglet d'arrière-plan et le content script
+// clique sur le vrai bouton J'aime (Instagram envoie alors sa propre requête).
+
+const LIKE_ROUTES = [
+  (m) => ({ path: `/api/v1/web/likes/${m.pk}/like/` }),
+  (m) => ({ path: `/web/likes/${m.pk}/like/` }),
+  (m) => (m.ownerPk ? {
+    path: `/api/v1/media/${m.pk}_${m.ownerPk}/like/`,
+    body: new URLSearchParams({ media_id: `${m.pk}_${m.ownerPk}`, container_module: 'feed_contextual_hashtag' }),
+  } : null),
+];
+const UI_MODE_MS = 24 * 3600 * 1000;
+
+async function likeViaApi(m) {
+  const { likeRoute = 0 } = await chrome.storage.local.get('likeRoute');
+  const order = [likeRoute, ...LIKE_ROUTES.keys()].filter((v, i, a) => a.indexOf(v) === i);
+  for (const i of order) {
+    const r = LIKE_ROUTES[i]?.(m);
+    if (!r) continue;
+    try {
+      await request(r.path, { method: 'POST', body: r.body || new URLSearchParams() });
+      await chrome.storage.local.set({ likeRoute: i });
+      return true;
+    } catch (e) {
+      // 404/405 : route disparue → suivante. Toute autre erreur (429, action bloquée…) remonte.
+      if (![404, 405].includes(e.status)) throw e;
+    }
+  }
+  return false;
+}
+
+/** Like via la page de la publication, dans un onglet épinglé d'arrière-plan réutilisé. */
+export async function likeViaPage(code) {
+  if (!code) throw new IgError('Code de publication manquant pour liker via la page', { kind: 'unknown' });
+  const url = `${BASE}/p/${code}/`;
+  if (likeTabId == null) likeTabId = (await chrome.storage.session.get('likeTabId')).likeTabId ?? null;
+  let tab = likeTabId != null ? await chrome.tabs.get(likeTabId).catch(() => null) : null;
+  if (tab) await chrome.tabs.update(tab.id, { url });
+  else tab = await chrome.tabs.create({ url, active: false, pinned: true });
+  likeTabId = tab.id;
+  await chrome.storage.session.set({ likeTabId });
+  await waitComplete(tab.id);
+  await sleep(2500 + rand(0, 1500));
+  for (let i = 0; i < 6; i++) {
+    let res = null;
+    try {
+      res = await chrome.tabs.sendMessage(tab.id, { type: 'igg:likeUi' }, { frameId: 0 });
+    } catch {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, frameIds: [0] }, files: ['src/content/ig-ui.js'] }).catch(() => {});
+    }
+    if (res?.status === 'liked' || res?.status === 'already') return res.status;
+    if (res?.status === 'blocked') throw new IgError('Instagram a bloqué l’action J’aime (action bloquée).', { kind: 'feedback' });
+    await sleep(1500);
+  }
+  throw new IgError('Bouton J’aime introuvable sur la publication.', { kind: 'unknown' });
+}
+
+/**
+ * Like intelligent : API si une route fonctionne, sinon clic sur la page.
+ * @returns {'api'|'page'|'already'}
+ */
+export async function likeMedia({ pk, ownerPk, code }) {
+  const { likeUiUntil = 0 } = await chrome.storage.local.get('likeUiUntil');
+  if (likeUiUntil < Date.now()) {
+    if (await likeViaApi({ pk, ownerPk })) return 'api';
+    // Toutes les routes ont disparu : on passe en mode « page » pour 24 h.
+    await chrome.storage.local.set({ likeUiUntil: Date.now() + UI_MODE_MS });
+  }
+  const status = await likeViaPage(code);
+  return status === 'already' ? 'already' : 'page';
 }
 
 export async function addComment(mediaPk, text) {

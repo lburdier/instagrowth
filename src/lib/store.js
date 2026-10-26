@@ -39,6 +39,13 @@ export const DEFAULT_SETTINGS = {
     maxFollowers: 20000,
     blacklist: [],
     addToLeads: true,
+    activeDays: [0, 1, 2, 3, 4, 5, 6], // 0 = dimanche
+    automations: {
+      newFollowers: { enabled: false, everyHours: 6, max: 10 },
+      likeBack: { enabled: false, everyHours: 4, max: 10 },
+      vip: { enabled: false, accounts: [], everyHours: 3 },
+      nurture: { enabled: false, statuses: ['warm', 'contacted'], everyDays: 3, max: 10 },
+    },
   },
   dmTemplates: [
     { id: 't1', name: 'Remerciement follow', text: 'Merci pour le follow ! Ravi(e) de te compter parmi nous ! Qu’est-ce qui t’a amené(e) sur le compte ?' },

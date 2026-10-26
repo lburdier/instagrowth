@@ -83,6 +83,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 async function ensureAlarms() {
   if (!(await chrome.alarms.get('autolike-tick'))) chrome.alarms.create('autolike-tick', { periodInMinutes: 1 });
   if (!(await chrome.alarms.get('daily'))) chrome.alarms.create('daily', { delayInMinutes: 1, periodInMinutes: 60 });
+  if (!(await chrome.alarms.get('automations'))) chrome.alarms.create('automations', { delayInMinutes: 2, periodInMinutes: 30 });
 }
 
 chrome.runtime.onInstalled.addListener(async ({ reason }) => {
@@ -326,6 +327,105 @@ async function refillQueue(cfg, st) {
   alLog(st, 'info', `${fresh.length} cibles ajoutées depuis ${src.type === 'hashtag' ? '#' + src.value.replace(/^#/, '') : '@' + src.value.replace(/^@/, '')}`);
 }
 
+// ---------------------------------------------------------------------------
+// Automatisations : elles ajoutent des cibles PRIORITAIRES dans la file ; le
+// moteur d'auto-like les traite avec les mêmes plafonds, délais et pauses.
+// ---------------------------------------------------------------------------
+
+export const AUTOMATIONS = {
+  newFollowers: 'Nouveaux abonnés',
+  likeBack: 'Retour de like',
+  vip: 'Comptes VIP',
+  nurture: 'Leads à entretenir',
+};
+
+function pushPriority(st, items) {
+  const key = (i) => i.mediaPk || `u${i.userPk}`;
+  const have = new Set(st.queue.map(key));
+  const fresh = items.filter((i) => !have.has(key(i)));
+  st.queue = [...fresh, ...st.queue].slice(0, 200);
+  return fresh.length;
+}
+
+async function runAutomations({ force = false, only = null } = {}) {
+  const s = await getSettings();
+  const cfg = s.autolike;
+  const a = cfg.automations || {};
+  if (!force && !cfg.enabled) return 'Auto-like désactivé.';
+  const st = await loadAL();
+  st.autoRuns ||= {};
+  st.autoStats ||= {};
+  const due = (k, ms) => (only ? only === k : true) && a[k]?.enabled && (force || !st.autoRuns[k] || Date.now() - st.autoRuns[k] > ms);
+  const done = (k, added, note = '') => {
+    st.autoRuns[k] = Date.now();
+    st.autoStats[k] = { at: Date.now(), added, note };
+    alLog(st, 'info', `Automatisation « ${AUTOMATIONS[k]} » : ${added} cible(s) ajoutée(s)${note ? ` (${note})` : ''}`);
+  };
+  const results = [];
+  try {
+    const needMe = due('newFollowers', a.newFollowers?.everyHours * 3600e3) || due('likeBack', a.likeBack?.everyHours * 3600e3);
+    const me = needMe ? await ig.me() : null;
+
+    if (due('newFollowers', a.newFollowers.everyHours * 3600e3)) {
+      const fs = await ig.followers(me.pk, { max: 50 });
+      const known = new Set(st.knownFollowers || []);
+      const firstRun = !known.size;
+      st.knownFollowers = [...new Set([...fs.map((u) => u.pk), ...(st.knownFollowers || [])])].slice(0, 3000);
+      const fresh = firstRun ? [] : fs.filter((u) => !known.has(u.pk) && !u.isPrivate);
+      const added = pushPriority(st, fresh.slice(0, a.newFollowers.max).map((u) => ({
+        userPk: u.pk, username: u.username, source: 'auto : nouvel abonné', priority: true,
+      })));
+      done('newFollowers', added, firstRun ? 'première passe : abonnés actuels mémorisés' : '');
+      results.push(`${AUTOMATIONS.newFollowers} : ${added}`);
+    }
+
+    if (due('likeBack', a.likeBack.everyHours * 3600e3)) {
+      const [last] = await ig.userFeed(me.pk, { max: 1, username: me.username });
+      let added = 0;
+      if (last) {
+        const ls = await ig.likers(last.pk);
+        added = pushPriority(st, ls.filter((u) => !u.isPrivate && u.pk !== me.pk).slice(0, a.likeBack.max).map((u) => ({
+          userPk: u.pk, username: u.username, source: 'auto : retour de like', priority: true,
+        })));
+      }
+      done('likeBack', added, last ? '' : 'aucune publication');
+      results.push(`${AUTOMATIONS.likeBack} : ${added}`);
+    }
+
+    if (due('vip', a.vip.everyHours * 3600e3) && a.vip.accounts?.length) {
+      let added = 0;
+      for (const name of a.vip.accounts.slice(0, 10)) {
+        const p = await ig.profileByUsername(name.replace(/^@/, ''));
+        const feed = p.recent?.length ? p.recent : await ig.userFeed(p.pk, { max: 3, username: p.username });
+        const fresh = feed.filter((m) => !m.likedByViewer && !st.liked.includes(m.pk) && Date.now() - m.takenAt < 3 * 86400e3).slice(0, 2);
+        added += pushPriority(st, fresh.map((m) => ({
+          userPk: p.pk, username: p.username, mediaPk: m.pk, code: m.code, thumb: m.thumb,
+          source: `auto : VIP @${p.username}`, priority: true, repeatUser: true,
+        })));
+      }
+      done('vip', added);
+      results.push(`${AUTOMATIONS.vip} : ${added}`);
+    }
+
+    if (due('nurture', a.nurture.everyDays * 86400e3)) {
+      const gap = a.nurture.everyDays * 86400e3;
+      const leads = (await db.all('leads'))
+        .filter((l) => a.nurture.statuses.includes(l.status) && !l.isPrivate && (!l.nurturedAt || Date.now() - l.nurturedAt > gap))
+        .slice(0, a.nurture.max);
+      const added = pushPriority(st, leads.map((l) => ({
+        userPk: l.pk, username: l.username, source: `auto : lead ${l.status}`, priority: true, repeatUser: true, leadPk: l.pk,
+      })));
+      done('nurture', added);
+      results.push(`${AUTOMATIONS.nurture} : ${added}`);
+    }
+  } catch (e) {
+    alLog(st, 'error', `Automatisation : ${e.message}`);
+    results.push(`Erreur : ${e.message}`);
+  }
+  await setState('autolike', { ...(await loadAL()), queue: st.queue, autoRuns: st.autoRuns, autoStats: st.autoStats, knownFollowers: st.knownFollowers, log: st.log });
+  return results.length ? results.join(' · ') : 'Aucune automatisation à lancer (désactivées ou pas encore dues).';
+}
+
 let tickRunning = false;
 
 /** @param {boolean} force « Liker maintenant » : ignore la plage horaire et le délai, garde les plafonds. */
@@ -353,6 +453,10 @@ async function autolikeTick(force = false) {
     if (st.pausedUntil > Date.now()) return stop('paused', `En pause : ${st.pauseReason}`);
     if (st.pausedUntil) { st.pausedUntil = 0; st.pauseReason = ''; alLog(st, 'info', 'Reprise après pause'); }
     const h = now.getHours();
+    const days = cfg.activeDays?.length ? cfg.activeDays : [0, 1, 2, 3, 4, 5, 6];
+    if (!force && !days.includes(now.getDay())) {
+      return stop('outside', 'En attente : aujourd’hui n’est pas un jour actif (voir Réglages).');
+    }
     if (!force && (h < cfg.activeStart || h >= cfg.activeEnd)) {
       const resume = new Date(now);
       resume.setHours(cfg.activeStart, 0, 0, 0);
@@ -370,8 +474,11 @@ async function autolikeTick(force = false) {
       // Quelques tentatives par tick (cibles ignorées par les filtres).
       for (let attempt = 0; attempt < 4 && st.queue.length; attempt++) {
         const item = st.queue.shift();
-        if (st.users[item.userPk]) continue;
-        const needsProfile = !item.mediaPk || cfg.minFollowers > 0 || cfg.maxFollowers > 0 || cfg.blacklist.length || cfg.addToLeads;
+        if (st.users[item.userPk] && !item.repeatUser) continue;
+        if (item.mediaPk && st.liked.includes(item.mediaPk)) continue;
+        // Cibles d'automatisation (abonnés, VIP, leads) : on ignore la fourchette d'abonnés.
+        const strict = !item.priority;
+        const needsProfile = !item.mediaPk || (strict && (cfg.minFollowers > 0 || cfg.maxFollowers > 0)) || cfg.blacklist.length || cfg.addToLeads;
         let profile = null;
         if (needsProfile) {
           try { profile = await ig.profileByUsername(item.username); } catch (e) { if (e.kind === 'notfound') continue; throw e; }
@@ -379,25 +486,31 @@ async function autolikeTick(force = false) {
           const skip =
             (cfg.skipPrivate && profile.isPrivate && 'privé') ||
             (cfg.skipVerified && profile.isVerified && 'vérifié') ||
-            (cfg.minFollowers && (profile.followers ?? 0) < cfg.minFollowers && 'trop peu d’abonnés') ||
-            (cfg.maxFollowers && (profile.followers ?? 0) > cfg.maxFollowers && 'trop d’abonnés') ||
+            (strict && cfg.minFollowers && (profile.followers ?? 0) < cfg.minFollowers && 'trop peu d’abonnés') ||
+            (strict && cfg.maxFollowers && (profile.followers ?? 0) > cfg.maxFollowers && 'trop d’abonnés') ||
             (cfg.blacklist.some((w) => w && bio.includes(w.toLowerCase())) && 'mot blacklisté') ||
-            (profile.followedByViewer && 'déjà suivi');
+            (strict && profile.followedByViewer && 'déjà suivi');
           if (skip) { st.users[item.userPk] = Date.now(); alLog(st, 'skip', `@${item.username} ignoré (${skip})`); continue; }
           if (!item.mediaPk) {
             const pool = profile.recent?.length ? profile.recent : await ig.userFeed(profile.pk, { max: 3, username: profile.username });
-            const recent = pool.find((m) => !m.likedByViewer);
+            const recent = pool.find((m) => !m.likedByViewer && !st.liked.includes(m.pk));
             if (!recent) { st.users[item.userPk] = Date.now(); alLog(st, 'skip', `@${item.username} ignoré (aucun post)`); continue; }
             Object.assign(item, { mediaPk: recent.pk, code: recent.code, thumb: recent.thumb });
           }
         }
 
-        await ig.likeMedia(item.mediaPk);
+        const via = await ig.likeMedia({ pk: item.mediaPk, ownerPk: item.userPk, code: item.code });
+        if (via === 'already') {
+          st.liked = [item.mediaPk, ...st.liked].slice(0, 3000);
+          alLog(st, 'skip', `@${item.username} : publication déjà likée`);
+          continue;
+        }
+        if (item.leadPk) await db.update('leads', item.leadPk, (l) => l && { ...l, nurturedAt: Date.now() });
         st.likesToday++; st.likesThisHour++; st.total++;
         st.history[today] = (st.history[today] || 0) + 1;
         st.liked = [item.mediaPk, ...st.liked].slice(0, 3000);
         st.users[item.userPk] = Date.now();
-        alLog(st, 'like', `Post liké : @${item.username} (${item.source})`, { username: item.username, code: item.code, thumb: item.thumb });
+        alLog(st, 'like', `Post liké : @${item.username} (${item.source})${via === 'page' ? ' · via la page' : ''}`, { username: item.username, code: item.code, thumb: item.thumb });
         st.likedList = [{
           ts: Date.now(), userPk: item.userPk, username: item.username, mediaPk: item.mediaPk, code: item.code, thumb: item.thumb, source: item.source,
           fullName: profile?.fullName || '', pic: profile?.pic || '', followers: profile?.followers ?? null, following: profile?.following ?? null,
@@ -588,6 +701,7 @@ async function onPostAlarm(id) {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === 'autolike-tick') autolikeTick();
   else if (alarm.name === 'daily') daily();
+  else if (alarm.name === 'automations') runAutomations();
   else if (alarm.name.startsWith('post:')) onPostAlarm(alarm.name.slice(5));
 });
 
@@ -669,6 +783,7 @@ const handlers = {
 
   async 'autolike:tick'() { await autolikeTick(); return loadAL(); },
   async 'autolike:runNow'() { return autolikeTick(true); },
+  async 'autolike:runAutomations'({ only }) { return runAutomations({ force: true, only }); },
   async 'autolike:resume'() { await patchState('autolike', { pausedUntil: 0, pauseReason: '', nextActionAt: 0 }); return true; },
   async 'autolike:resetQueue'() { await patchState('autolike', { queue: [] }); return true; },
 

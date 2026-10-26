@@ -64,6 +64,18 @@ Tu obtiens les chiffres du post comparés à la moyenne de tes 12 derniers posts
 L'onglet **Auto-like** a quatre vues : **Vue d'ensemble** (statut en direct, derniers comptes likés, prochaines cibles), **Comptes likés** (liste détaillée filtrable : abonnés, post liké, source, date, follow-back, statut de lead, export CSV), **Réglages** et **Journal**.
 Le bouton **Liker maintenant** lance un passage immédiat, hors plage horaire mais dans le respect des plafonds.
 
+## Automatisations d'auto-like
+
+Dans **Auto-like → Automatisations**, chaque règle s'active séparément et ajoute des cibles **prioritaires** dans la file. Ces cibles passent par les mêmes plafonds, délais, plage horaire et jours actifs que le reste :
+- **Liker mes nouveaux abonnés** : like la dernière publication de chaque nouvel abonné.
+- **Rendre les likes** : like une publication des personnes qui ont liké ta dernière publication.
+- **Comptes VIP** : like chaque nouvelle publication des comptes de ta liste.
+- **Entretenir mes leads** : like régulièrement les publications de tes leads chauds ou contactés.
+
+Les règles tournent toutes les 30 minutes ; le bouton **Lancer maintenant** déclenche une règle tout de suite. Les **jours actifs** se règlent dans Auto-like → Réglages.
+
+Si l'adresse de like d'Instagram change (erreur 404), l'extension essaie d'autres routes connues. Si aucune ne marche, elle ouvre la publication dans un onglet épinglé d'arrière-plan et clique sur le vrai bouton « J'aime ».
+
 ## IA : connexion
 
 - **Claude (Anthropic)** : bouton **Se connecter avec Claude** dans Réglages. La console Claude (platform.claude.com) s'ouvre ; tu crées une clé, puis tu cliques sur **Connecter à InstaGrowth** dans la carte qui s'affiche. La clé est vérifiée auprès d'Anthropic, l'onglet se ferme et tu reviens à InstaGrowth. Tu peux aussi coller une clé, ou un **jeton OAuth** (Bearer), dans « Options avancées ».

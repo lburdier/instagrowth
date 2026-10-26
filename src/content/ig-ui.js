@@ -69,8 +69,34 @@
     return { status: res.status, text: await res.text() };
   }
 
+  // --- Like par clic sur le vrai bouton (repli quand l'API de like a changé) ------
+  const LIKE_RE = /^(J’aime|J'aime|Like|Me gusta|Gefällt mir|Mi piace|Curtir)$/i;
+  const UNLIKE_RE = /^(Je n’aime plus|Je n'aime plus|Unlike|Ya no me gusta|Gefällt mir nicht mehr|Non mi piace più|Descurtir)$/i;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /** Le cœur de la barre d'actions de la publication (24 px), pas ceux des commentaires (12-16 px). */
+  function actionHeart(re) {
+    const scope = document.querySelector('div[role="dialog"] article, main article, main') || document;
+    return [...scope.querySelectorAll('svg[aria-label]')]
+      .find((s) => re.test(s.getAttribute('aria-label')) && Number(s.getAttribute('width') || s.getBoundingClientRect().width) >= 20);
+  }
+
+  async function likeUi() {
+    if (actionHeart(UNLIKE_RE)) return { status: 'already' };
+    const heart = actionHeart(LIKE_RE);
+    if (!heart) return { status: 'notfound' };
+    (heart.closest('[role="button"], button') || heart.parentElement).click();
+    for (let i = 0; i < 8; i++) {
+      await wait(400);
+      if (actionHeart(UNLIKE_RE)) return { status: 'liked' };
+      if (/action bloquée|action blocked|try again later|réessayez plus tard/i.test(document.body.innerText.slice(-3000))) return { status: 'blocked' };
+    }
+    return { status: 'notconfirmed' };
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'igg:ping') { sendResponse('pong'); return false; }
+    if (msg?.type === 'igg:likeUi') { likeUi().then(sendResponse); return true; }
     if (msg?.type === 'igg:fetch') {
       igFetch(msg).then(sendResponse).catch((e) => sendResponse({ error: e.message }));
       return true;

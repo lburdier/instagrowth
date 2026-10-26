@@ -32,6 +32,8 @@ function fillForm() {
   for (const k of ['warmup', 'skipPrivate', 'skipVerified', 'addToLeads']) $(`#al-${k}`, el).checked = cfg[k];
   $('#al-blacklist', el).value = cfg.blacklist.join(', ');
   $$('#al-presets button', el).forEach((b) => b.classList.toggle('active', b.dataset.preset === cfg.preset));
+  const days = cfg.activeDays?.length ? cfg.activeDays : [0, 1, 2, 3, 4, 5, 6];
+  $$('#al-days button', el).forEach((b) => b.classList.toggle('active', days.includes(Number(b.dataset.day))));
 }
 
 function readForm() {
@@ -48,16 +50,20 @@ function readForm() {
     warmup: $('#al-warmup', el).checked, skipPrivate: $('#al-skipPrivate', el).checked,
     skipVerified: $('#al-skipVerified', el).checked, addToLeads: $('#al-addToLeads', el).checked,
     blacklist: $('#al-blacklist', el).value.split(',').map((s) => s.trim()).filter(Boolean),
+    activeDays: $$('#al-days button.active', el).map((b) => Number(b.dataset.day)),
   });
 }
 
+const anyAutomation = () => Object.values(cfg.automations || {}).some((a) => a.enabled);
+
 async function save(silent = false) {
   const next = readForm();
-  if (next.enabled && !next.hashtags.length && !next.competitors.length) {
+  if (next.enabled && !next.hashtags.length && !next.competitors.length && !anyAutomation()) {
     $('#al-enabled', el).checked = false;
     next.enabled = false;
-    toast('Ajoute au moins un hashtag ou un compte concurrent (onglet Réglages).', 'err');
+    toast('Ajoute des hashtags ou des concurrents (onglet Réglages), ou active une automatisation.', 'err');
   }
+  if (!next.activeDays.length) next.activeDays = [0, 1, 2, 3, 4, 5, 6];
   cfg = next;
   await saveSettings({ autolike: cfg });
   fillForm();
@@ -95,7 +101,7 @@ function renderOverview() {
     ${cfg.warmup && limit < cfg.dailyLimit ? `<p class="muted h-ico" style="margin-top:6px"><i data-i="sprout" data-s="16"></i> Warm-up actif : limite progressive (${limit}/${cfg.dailyLimit}) pendant les 7 premiers jours.</p>` : ''}`;
   $('#al-resume', el)?.addEventListener('click', async () => { await send('autolike:resume'); refresh(); });
   $('#al-now', el).onclick = (e) => busy(e.currentTarget, async () => {
-    if (!cfg.hashtags.length && !cfg.competitors.length) throw new Error('Ajoute d’abord des hashtags ou des concurrents (onglet Réglages).');
+    if (!cfg.hashtags.length && !cfg.competitors.length && !(st.queue || []).length) throw new Error('Ajoute d’abord des hashtags ou des concurrents (onglet Réglages), ou lance une automatisation.');
     toast(await send('autolike:runNow') || 'Passage terminé');
     refresh();
   });
@@ -200,6 +206,79 @@ function renderLiked() {
   }).join('') : '<tr><td colspan="8" class="empty">Aucun compte liké sur cette période.</td></tr>';
 }
 
+// --- Automatisations ----------------------------------------------------------------
+
+const AUTOS = {
+  newFollowers: {
+    icon: 'userPlus', title: 'Liker mes nouveaux abonnés',
+    desc: 'Like la dernière publication de chaque nouvel abonné : un merci discret qui crée le lien.',
+    fields: [['everyHours', 'Vérifier toutes les (heures)', 1, 48], ['max', 'Abonnés max par passage', 1, 30]],
+  },
+  likeBack: {
+    icon: 'heart', title: 'Rendre les likes',
+    desc: 'Like une publication des personnes qui ont liké ta dernière publication.',
+    fields: [['everyHours', 'Vérifier toutes les (heures)', 1, 48], ['max', 'Comptes max par passage', 1, 30]],
+  },
+  vip: {
+    icon: 'star', title: 'Comptes VIP',
+    desc: 'Like automatiquement chaque nouvelle publication (moins de 3 jours) des comptes de ta liste : partenaires, clients, influenceurs.',
+    fields: [['everyHours', 'Vérifier toutes les (heures)', 1, 24]],
+    accounts: true,
+  },
+  nurture: {
+    icon: 'flame', title: 'Entretenir mes leads',
+    desc: 'Like régulièrement les publications de tes leads chauds et contactés pour rester dans leur esprit.',
+    fields: [['everyDays', 'Tous les (jours)', 1, 14], ['max', 'Leads max par passage', 1, 30]],
+    statuses: true,
+  },
+};
+
+function renderAutomations() {
+  const a = cfg.automations || {};
+  const stats = st.autoStats || {};
+  $('#auto-list', el).innerHTML = Object.entries(AUTOS).map(([k, def]) => {
+    const c = a[k] || {};
+    const last = stats[k];
+    return `<div class="card auto-card ${c.enabled ? 'on' : ''}" data-auto="${k}">
+      <div class="row between" style="flex-wrap:nowrap;align-items:flex-start">
+        <div class="row" style="flex-wrap:nowrap;align-items:flex-start;gap:12px">
+          <span class="auto-ico">${icon(def.icon, 20)}</span>
+          <div><h3 style="margin:0 0 4px">${def.title}</h3><p class="muted" style="margin:0">${def.desc}</p></div>
+        </div>
+        <label class="switch"><input type="checkbox" data-k="enabled" ${c.enabled ? 'checked' : ''}><span></span></label>
+      </div>
+      <div class="row" style="margin-top:14px;gap:12px;align-items:flex-end">
+        ${def.fields.map(([f, label, min, max]) => `<div class="field" style="margin:0;width:180px"><label>${label}</label>
+          <input type="number" data-k="${f}" min="${min}" max="${max}" value="${c[f] ?? min}"></div>`).join('')}
+        ${def.accounts ? `<div class="field" style="margin:0;flex:1;min-width:240px"><label>Comptes (séparés par des virgules)</label>
+          <input type="text" data-k="accounts" placeholder="@partenaire, @client" value="${escapeHtml((c.accounts || []).map((x) => '@' + x).join(', '))}"></div>` : ''}
+        ${def.statuses ? `<div class="field" style="margin:0"><label>Statuts concernés</label><div class="tabs" data-k="statuses">
+          ${['warm', 'contacted', 'replied', 'won'].map((s) => `<button data-status="${s}" class="${(c.statuses || []).includes(s) ? 'active' : ''}">${STATUSES[s]}</button>`).join('')}</div></div>` : ''}
+        <span class="spacer"></span>
+        <button class="sm" data-run="${k}">${icon('bolt', 14)} Lancer maintenant</button>
+      </div>
+      <p class="muted" style="margin:10px 0 0;font-size:12px">${last ? `Dernier passage ${fmtDate(last.at)} : ${last.added} cible(s) ajoutée(s)${last.note ? ` · ${escapeHtml(last.note)}` : ''}` : 'Jamais lancée.'}</p>
+    </div>`;
+  }).join('');
+}
+
+async function saveAutomation(card) {
+  const k = card.dataset.auto;
+  const cur = { ...(cfg.automations?.[k] || {}) };
+  for (const input of card.querySelectorAll('input[data-k]')) {
+    const f = input.dataset.k;
+    if (f === 'enabled') cur.enabled = input.checked;
+    else if (f === 'accounts') cur.accounts = input.value.split(/[,\s]+/).map((x) => x.trim().replace(/^@/, '')).filter(Boolean);
+    else cur[f] = Math.max(Number(input.min) || 1, Math.min(Number(input.max) || 99, Number(input.value) || Number(input.min) || 1));
+  }
+  const st2 = card.querySelector('[data-k="statuses"]');
+  if (st2) cur.statuses = [...st2.querySelectorAll('button.active')].map((b) => b.dataset.status);
+  if (k === 'vip' && cur.enabled && !cur.accounts?.length) { cur.enabled = false; toast('Ajoute au moins un compte VIP.', 'err'); }
+  cfg.automations = { ...cfg.automations, [k]: cur };
+  await saveSettings({ autolike: { automations: { [k]: cur } } });
+  renderAutomations();
+}
+
 // --- Journal -----------------------------------------------------------------------
 
 function renderLog() {
@@ -219,6 +298,7 @@ async function refresh() {
   if (tab === 'overview') renderOverview();
   if (tab === 'liked') renderLiked();
   if (tab === 'log') renderLog();
+  if (tab === 'auto') renderAutomations();
 }
 
 function setTab(t) {
@@ -241,6 +321,7 @@ export default {
       <div class="tabs" id="al-tabs" style="margin-bottom:18px">
         <button data-tab="overview" class="active">Vue d’ensemble</button>
         <button data-tab="liked">Comptes likés<span id="al-tab-liked-count"></span></button>
+        <button data-tab="auto">Automatisations</button>
         <button data-tab="settings">Réglages</button>
         <button data-tab="log">Journal</button>
       </div>
@@ -279,6 +360,11 @@ export default {
             </table>
           </div>
         </div>
+      </section>
+
+      <section class="al-section" data-section="auto" hidden>
+        <div class="alert info">Les automatisations ajoutent des cibles <strong>prioritaires</strong> dans la file d’auto-like. Elles respectent les mêmes plafonds, délais, plage horaire et jours actifs, et l’auto-like doit être activé (interrupteur en haut à droite). Elles tournent toutes les 30 minutes.</div>
+        <div class="stack" id="auto-list"></div>
       </section>
 
       <section class="al-section" data-section="settings" hidden>
@@ -320,6 +406,8 @@ export default {
               <div class="field" style="flex:1"><label>Début (heure)</label><input type="number" id="al-activeStart" min="0" max="23"></div>
               <div class="field" style="flex:1"><label>Fin (heure)</label><input type="number" id="al-activeEnd" min="1" max="24"></div>
             </div>
+            <div class="field"><label>Jours actifs</label>
+              <div class="tabs" id="al-days">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button data-day="${d}">${['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][d]}</button>`).join('')}</div></div>
             <label class="check"><input type="checkbox" id="al-warmup"> Warm-up : montée progressive sur 7 jours (${LIMITS.warmup.join(' → ')})</label>
             <div class="row" style="margin-top:12px">
               <button class="primary" id="al-save">Enregistrer</button>
@@ -338,6 +426,20 @@ export default {
     $('#al-save', el).onclick = (e) => busy(e.currentTarget, () => save());
     $('#al-enabled', el).onchange = () => save(true).then(() => toast(cfg.enabled ? 'Auto-like activé : premier passage dans la minute' : 'Auto-like désactivé'));
     $('#al-reset', el).onclick = async () => { await send('autolike:resetQueue'); toast('File vidée'); refresh(); };
+    $('#al-days', el).onclick = (e) => { const b = e.target.closest('[data-day]'); if (b) b.classList.toggle('active'); };
+    const autoList = $('#auto-list', el);
+    autoList.addEventListener('change', (e) => { const card = e.target.closest('[data-auto]'); if (card) saveAutomation(card); });
+    autoList.addEventListener('click', (e) => {
+      const card = e.target.closest('[data-auto]');
+      const statusBtn = e.target.closest('[data-status]');
+      if (statusBtn && card) { statusBtn.classList.toggle('active'); return saveAutomation(card); }
+      const run = e.target.closest('[data-run]');
+      if (run) busy(run, async () => {
+        if (!cfg.automations?.[run.dataset.run]?.enabled) throw new Error('Active d’abord cette automatisation.');
+        toast(await send('autolike:runAutomations', { only: run.dataset.run }));
+        await refresh();
+      });
+    });
     $('#al-presets', el).onclick = (e) => {
       const p = LIMITS.presets[e.target.dataset.preset];
       if (!p) return;
