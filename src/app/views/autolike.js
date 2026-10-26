@@ -89,7 +89,7 @@ function renderOverview() {
       <button class="primary sm" id="al-now" title="Lance un like tout de suite (plage horaire ignorée, plafonds respectés)">${icon('bolt', 14)} Liker maintenant</button>
     </div>
     ${paused ? `<div class="alert err" style="margin:10px 0 0">${escapeHtml(st.pauseReason)}<br><small>Reprise auto : ${new Date(st.pausedUntil).toLocaleString('fr-FR')}</small>
-      <div style="margin-top:6px"><button class="sm" id="al-resume">Reprendre maintenant (déconseillé)</button></div></div>` : ''}
+      <div style="margin-top:6px"><button class="sm" id="al-resume">${st.pauseKind === 'auth' || /Non connecté/.test(st.pauseReason || '') ? 'Réessayer maintenant' : 'Reprendre maintenant (déconseillé)'}</button></div></div>` : ''}
     ${state === 'outside' && st.resumeAt ? `<p class="muted" style="margin-top:8px">Les likes reprendront automatiquement ${fmtDate(st.resumeAt)}. Change la plage horaire dans l’onglet Réglages.</p>` : ''}
     <div class="row" style="margin-top:12px;gap:22px">
       <div class="kpi"><span class="label">Cette heure</span><span>${st.hour?.startsWith(today) ? st.likesThisHour || 0 : 0} / ${cfg.hourlyLimit}</span></div>

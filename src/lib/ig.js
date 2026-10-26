@@ -35,14 +35,36 @@ async function throttle() {
   readWindow.push(lastCall);
 }
 
-async function cookie(name) {
-  const c = await chrome.cookies.get({ url: BASE, name });
-  return c?.value || '';
+/** Tous les cookies instagram.com, y compris les cookies partitionnés (CHIPS) quand le navigateur les gère. */
+async function igCookies() {
+  const out = [];
+  try { out.push(...await chrome.cookies.getAll({ domain: 'instagram.com' })); } catch { /* ignore */ }
+  try { out.push(...await chrome.cookies.getAll({ domain: 'instagram.com', partitionKey: {} })); } catch { /* API ancienne */ }
+  return out;
+}
+
+/** Repli : un onglet instagram.com ouvert lit son cookie ds_user_id côté page (sans en créer un nouveau). */
+async function sessionFromPage() {
+  const tabs = (await chrome.tabs.query({ url: `${BASE}/*` })).filter((t) => !t.discarded);
+  for (const t of tabs.slice(0, 3)) {
+    try {
+      const r = await chrome.tabs.sendMessage(t.id, { type: 'igg:session' }, { frameId: 0 });
+      if (r?.userId) return r.userId;
+    } catch { /* onglet sans content script */ }
+  }
+  return '';
 }
 
 export async function session() {
-  const [userId, sessionid] = await Promise.all([cookie('ds_user_id'), cookie('sessionid')]);
-  return { userId, loggedIn: Boolean(sessionid && userId) };
+  const cookies = await igCookies();
+  const get = (name) => cookies.find((c) => c.name === name && c.value)?.value || '';
+  const userId = get('ds_user_id');
+  if (get('sessionid') && userId) return { userId, loggedIn: true };
+  // Certains navigateurs (ou un cookie en cours de renouvellement) ne laissent pas voir la session :
+  // on demande à la page Instagram elle-même avant de conclure « non connecté ».
+  const pageUser = await sessionFromPage().catch(() => '');
+  if (pageUser) return { userId: pageUser, loggedIn: true, viaPage: true };
+  return { userId, loggedIn: false };
 }
 
 function classify(status, body) {

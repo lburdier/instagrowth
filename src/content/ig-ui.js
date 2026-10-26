@@ -96,6 +96,7 @@
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'igg:ping') { sendResponse('pong'); return false; }
+    if (msg?.type === 'igg:session') { sendResponse({ userId: cookie('ds_user_id') }); return false; }
     if (msg?.type === 'igg:likeUi') { likeUi().then(sendResponse); return true; }
     if (msg?.type === 'igg:fetch') {
       igFetch(msg).then(sendResponse).catch((e) => sendResponse({ error: e.message }));

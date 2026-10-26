@@ -288,10 +288,12 @@ function alLog(st, kind, text, extra = {}) {
 }
 
 function pauseFor(st, err) {
-  const map = { rate: LIMITS.pause.rateLimited, feedback: LIMITS.pause.feedback, checkpoint: LIMITS.pause.checkpoint, auth: 60 * 60 * 1000 };
+  // « Non connecté » : pause courte, levée automatiquement dès que la session Instagram est revue.
+  const map = { rate: LIMITS.pause.rateLimited, feedback: LIMITS.pause.feedback, checkpoint: LIMITS.pause.checkpoint, auth: 10 * 60 * 1000 };
   const ms = map[err.kind] ?? 30 * 60 * 1000;
   st.pausedUntil = Date.now() + ms;
   st.pauseReason = err.message;
+  st.pauseKind = err.kind;
   alLog(st, 'pause', `Pause ${Math.round(ms / 3600000 * 10) / 10} h : ${err.message}`);
   notify('autolike-pause', 'Auto-like en pause', `${err.message} — reprise automatique dans ${Math.round(ms / 60000)} min.`);
 }
@@ -450,8 +452,15 @@ async function autolikeTick(force = false) {
 
     const stop = async (state, status) => { st.state = state; st.status = status; st.lastResult = status; await setState('autolike', st); return status; };
     const save = () => setState('autolike', st);
+    // (pauseReason couvre aussi les pauses enregistrées avant la v0.6.3, sans pauseKind)
+    if (st.pausedUntil > Date.now() && (st.pauseKind === 'auth' || /Non connecté/.test(st.pauseReason || '')) && (await ig.session()).loggedIn) {
+      st.pausedUntil = 0;
+      st.pauseReason = '';
+      st.pauseKind = '';
+      alLog(st, 'info', 'Session Instagram retrouvée : reprise');
+    }
     if (st.pausedUntil > Date.now()) return stop('paused', `En pause : ${st.pauseReason}`);
-    if (st.pausedUntil) { st.pausedUntil = 0; st.pauseReason = ''; alLog(st, 'info', 'Reprise après pause'); }
+    if (st.pausedUntil) { st.pausedUntil = 0; st.pauseReason = ''; st.pauseKind = ''; alLog(st, 'info', 'Reprise après pause'); }
     const h = now.getHours();
     const days = cfg.activeDays?.length ? cfg.activeDays : [0, 1, 2, 3, 4, 5, 6];
     if (!force && !days.includes(now.getDay())) {
