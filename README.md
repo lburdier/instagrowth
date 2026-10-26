@@ -62,6 +62,8 @@ Tu obtiens les chiffres du post comparés à la moyenne de tes 12 derniers posts
 ## Suivi de l'auto-like
 
 L'onglet **Auto-like** a quatre vues : **Vue d'ensemble** (statut en direct, derniers comptes likés, prochaines cibles), **Comptes likés** (liste détaillée filtrable : abonnés, post liké, source, date, follow-back, statut de lead, export CSV), **Réglages** et **Journal**.
+En option (Auto-like → Réglages → **Notification à chaque like**), l'extension te prévient à chaque like confirmé : notification du système, ou petite bulle dans Instagram.
+
 Le bouton **Liker maintenant** lance un passage immédiat, hors plage horaire mais dans le respect des plafonds.
 
 ## Téléchargement des publications

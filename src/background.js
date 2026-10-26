@@ -477,6 +477,25 @@ async function runAutomations({ force = false, only = null } = {}) {
   return results.length ? results.join(' · ') : 'Aucune automatisation à lancer (désactivées ou pas encore dues).';
 }
 
+let lastLikeNotif = null;
+
+/** Notification optionnelle après chaque like vérifié (la précédente est retirée : pas d'avalanche). */
+async function notifyLike(mode, item, likesToday, limit) {
+  if (!mode || mode === 'off') return;
+  const text = `@${item.username} · ${item.source} · ${likesToday}/${limit} aujourd’hui`;
+  if (mode === 'system') {
+    if (lastLikeNotif) chrome.notifications.clear(lastLikeNotif);
+    lastLikeNotif = `autolike-like-${Date.now()}`;
+    notify(lastLikeNotif, 'Like envoyé', text);
+    return;
+  }
+  // « page » : petite bulle dans les onglets Instagram ouverts.
+  const tabs = await chrome.tabs.query({ url: 'https://www.instagram.com/*' }).catch(() => []);
+  for (const t of tabs) {
+    chrome.tabs.sendMessage(t.id, { type: 'igg:toast', text: `InstaGrowth a liké un post de ${text}` }, { frameId: 0 }).catch(() => {});
+  }
+}
+
 let tickRunning = false;
 
 /** @param {boolean} force « Liker maintenant » : ignore la plage horaire et le délai, garde les plafonds. */
@@ -576,6 +595,7 @@ async function autolikeTick(force = false) {
           category: profile?.category || '', forced: force, verified: true, via,
         }, ...st.likedList].slice(0, 1000);
         st.lastResult = `Post de @${item.username} liké (${item.source}).`;
+        notifyLike(cfg.notifyOnLike, item, st.likesToday, limit);
         if (cfg.addToLeads && profile) await upsertLead(leadFromUser(profile, `auto-like ${item.source}`, { status: 'liked', likedAt: Date.now() }));
 
         let delay = rand(cfg.minDelaySec, cfg.maxDelaySec) * 1000;

@@ -42,6 +42,7 @@ export const DEFAULT_SETTINGS = {
     maxFollowers: 20000,
     blacklist: [],
     addToLeads: true,
+    notifyOnLike: 'off', // off | system (notification Windows/macOS) | page (bulle dans Instagram)
     activeDays: [0, 1, 2, 3, 4, 5, 6], // 0 = dimanche
     automations: {
       newFollowers: { enabled: false, everyHours: 6, max: 10 },

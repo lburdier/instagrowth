@@ -30,6 +30,7 @@ function fillForm() {
   $('#al-competitors', el).value = cfg.competitors.map((c) => '@' + c).join(', ');
   for (const k of ['dailyLimit', 'hourlyLimit', 'minDelaySec', 'maxDelaySec', 'activeStart', 'activeEnd', 'minFollowers', 'maxFollowers']) $(`#al-${k}`, el).value = cfg[k];
   for (const k of ['warmup', 'skipPrivate', 'skipVerified', 'addToLeads']) $(`#al-${k}`, el).checked = cfg[k];
+  $('#al-notifyOnLike', el).value = cfg.notifyOnLike || 'off';
   $('#al-blacklist', el).value = cfg.blacklist.join(', ');
   $$('#al-presets button', el).forEach((b) => b.classList.toggle('active', b.dataset.preset === cfg.preset));
   const days = cfg.activeDays?.length ? cfg.activeDays : [0, 1, 2, 3, 4, 5, 6];
@@ -51,6 +52,7 @@ function readForm() {
     skipVerified: $('#al-skipVerified', el).checked, addToLeads: $('#al-addToLeads', el).checked,
     blacklist: $('#al-blacklist', el).value.split(',').map((s) => s.trim()).filter(Boolean),
     activeDays: $$('#al-days button.active', el).map((b) => Number(b.dataset.day)),
+    notifyOnLike: $('#al-notifyOnLike', el).value,
   });
 }
 
@@ -414,6 +416,13 @@ export default {
             <div class="field"><label>Jours actifs</label>
               <div class="tabs" id="al-days">${[1, 2, 3, 4, 5, 6, 0].map((d) => `<button data-day="${d}">${['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam'][d]}</button>`).join('')}</div></div>
             <label class="check"><input type="checkbox" id="al-warmup"> Warm-up : montée progressive sur 7 jours (${LIMITS.warmup.join(' → ')})</label>
+            <div class="field" style="margin-top:6px;max-width:420px"><label>Notification à chaque like</label>
+              <select id="al-notifyOnLike">
+                <option value="off">Aucune</option>
+                <option value="system">Notification du système (Windows / macOS)</option>
+                <option value="page">Petite bulle dans Instagram</option>
+              </select>
+              <small>Seuls les likes confirmés par Instagram sont notifiés. Chaque nouvelle notification remplace la précédente.</small></div>
             <div class="row" style="margin-top:12px">
               <button class="primary" id="al-save">Enregistrer</button>
               <button id="al-reset" title="Vide la file d’attente de cibles">Vider la file</button>
@@ -432,6 +441,8 @@ export default {
     $('#al-enabled', el).onchange = () => save(true).then(() => toast(cfg.enabled ? 'Auto-like activé : premier passage dans la minute' : 'Auto-like désactivé'));
     $('#al-reset', el).onclick = async () => { await send('autolike:resetQueue'); toast('File vidée'); refresh(); };
     $('#al-days', el).onclick = (e) => { const b = e.target.closest('[data-day]'); if (b) b.classList.toggle('active'); };
+    // Enregistré immédiatement, sans passer par le bouton « Enregistrer ».
+    $('#al-notifyOnLike', el).onchange = () => save(true).then(() => toast(cfg.notifyOnLike === 'off' ? 'Notifications de like désactivées' : 'Notifications de like activées'));
     const autoList = $('#auto-list', el);
     autoList.addEventListener('change', (e) => { const card = e.target.closest('[data-auto]'); if (card) saveAutomation(card); });
     autoList.addEventListener('click', (e) => {

@@ -81,6 +81,16 @@
       .find((s) => re.test(s.getAttribute('aria-label')) && Number(s.getAttribute('width') || s.getBoundingClientRect().width) >= 20);
   }
 
+  /** Bulle discrète en bas de la page (notifications de like optionnelles). */
+  function showToast(text) {
+    if (document.hidden) return;
+    const t = document.createElement('div');
+    t.className = 'igg-toast';
+    t.textContent = text;
+    document.body.append(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+
   /** Ce que l'extension voit sur la page (pour diagnostiquer un like non confirmé). */
   function heartsSeen() {
     const scope = document.querySelector('div[role="dialog"] article, main article, main') || document;
@@ -123,6 +133,7 @@
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (msg?.type === 'igg:ping') { sendResponse('pong'); return false; }
     if (msg?.type === 'igg:session') { sendResponse({ userId: cookie('ds_user_id') }); return false; }
+    if (msg?.type === 'igg:toast') { showToast(msg.text); return false; }
     if (msg?.type === 'igg:likeUi') { likeUi().then(sendResponse); return true; }
     if (msg?.type === 'igg:fetch') {
       igFetch(msg).then(sendResponse).catch((e) => sendResponse({ error: e.message }));
