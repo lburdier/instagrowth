@@ -14,9 +14,12 @@
   // Quand il est actif (attribut posé sur <html> par le content script), les
   // requêtes qui signalent « story vue » ne partent pas : Instagram reçoit une
   // réponse factice et la story ne te compte pas dans ses vues.
-  const SEEN_URL = /\/stories\/reel\/seen|\/stories\/reel\/mark_seen|\/api\/v2\/media\/seen|\/media\/seen\//i;
-  // Uniquement les stories / reels de stories : les « vu » des DM et notifications ne sont pas touchés.
-  const SEEN_NAME = /(Stor(y|ies)|Reel)\w*Seen|Seen\w*(Stor(y|ies)|Reel)|reel_seen|reel\/seen|reels?_mark_seen/i;
+  // Endpoints REST historiques de l'accusé « story vue ».
+  const SEEN_URL = /\/api\/v1\/stories\/reel\/seen|\/stories\/reel\/mark_seen|\/api\/v2\/media\/seen/i;
+  // GraphQL : uniquement le NOM de l'opération (jamais le contenu des variables, qui peut contenir des
+  // paramètres internes ressemblant à « StoriesSeen » dans des requêtes de lecture du profil).
+  // Il faut une mutation qui concerne une story/reel et le fait de l'avoir vue. Les « vu » des DM et notifications ne sont pas touchés.
+  const isSeenMutation = (name) => /Mutation$/i.test(name) && /(Stor(y|ies)|Reel)/i.test(name) && /Seen/i.test(name) && !/Thread|Direct|Notification|Inbox/i.test(name);
   const FAKE = '{"status":"ok","data":{}}';
   const ghostOn = () => document.documentElement.getAttribute('data-igg-ghost') === '1';
 
@@ -40,10 +43,17 @@
     } catch { return ''; }
   }
 
+  function friendlyFromBody(body) {
+    const text = bodyText(body);
+    if (!text || !text.includes('fb_api_req_friendly_name')) return '';
+    try { return new URLSearchParams(text).get('fb_api_req_friendly_name') || ''; } catch { return ''; }
+  }
+
   function isStorySeen(url, body, friendlyName) {
     if (!ghostOn()) return false;
-    const text = decodeURIComponent(bodyText(body).replace(/\+/g, ' ')).slice(0, 4000);
-    return SEEN_URL.test(url) || SEEN_NAME.test(friendlyName || '') || /fb_api_req_friendly_name=[^&]*(Stor|Reel)[^&]*Seen/i.test(text) || (/\/graphql/.test(url) && SEEN_NAME.test(text));
+    if (SEEN_URL.test(url)) return true;
+    if (!/\/graphql|\/api\/graphql/.test(url)) return false;
+    return isSeenMutation(friendlyName || '') || isSeenMutation(friendlyFromBody(body));
   }
 
   function notifyBlocked() {

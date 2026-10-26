@@ -9,7 +9,9 @@ import { icon } from '../../lib/icons.js';
 import { openPostInsight } from '../postInsight.js';
 
 let el;
-let current = null; // { profile, posts, stats }
+let current = null; // { profile, posts, stats, self }
+let mine = null; // dernières stats de ton compte, pour la comparaison
+const RECENT_KEY = 'recentAnalyses';
 
 const TYPE_LABEL = { photo: 'Photo', video: 'Vidéo', carousel: 'Carrousel', reel: 'Reel' };
 
@@ -25,6 +27,14 @@ function render() {
   const growthPts = s.snapshots.map((x) => ({ label: x.date.slice(5).split('-').reverse().join('/'), value: x.followers }));
 
   $('#dash-body', el).innerHTML = `
+    ${current.self ? '' : `<div class="other-banner">
+      <span class="h-ico">${icon('search', 18)} Statistiques de <strong>@${escapeHtml(p.username)}</strong>, calculées sur ses publications publiques.</span>
+      <span class="spacer"></span>
+      <button class="sm" id="dash-compare">${icon('chart', 14)} Comparer avec mon compte</button>
+      <button class="sm" id="dash-lead">${icon('userPlus', 14)} Ajouter aux leads</button>
+      <button class="sm primary" id="dash-me">Revenir à mon compte</button>
+    </div>
+    <div id="dash-compare-out"></div>`}
     <div class="card row" style="margin-bottom:16px">
       <div class="avatar" style="width:64px;height:64px;background-image:url('${escapeHtml(p.pic)}')"></div>
       <div style="flex:1;min-width:200px">
@@ -56,7 +66,8 @@ function render() {
     </div>
 
     <div class="grid g2" style="margin-bottom:16px">
-      <div class="card"><h2>Croissance des abonnés</h2>${lineChart(growthPts, { format: fmtNum })}</div>
+      <div class="card"><h2>Croissance des abonnés</h2>${current.self ? lineChart(growthPts, { format: fmtNum })
+        : '<div class="empty">L’historique d’abonnés n’est enregistré que pour ton compte (un relevé par jour).</div>'}</div>
       <div class="card">
         <h2>Diagnostic express</h2>
         ${localInsights(s).map((i) => `<div class="insight"><span class="dot ${i.level}"></span><div>${escapeHtml(i.text)}</div></div>`).join('')}
@@ -93,6 +104,14 @@ function render() {
     </div>`;
 
   $('#ai-review', el).onclick = (e) => busy(e.currentTarget, aiReview);
+  if (!current.self) {
+    $('#dash-me', el).onclick = () => { $('#dash-user', el).value = ''; load(''); };
+    $('#dash-compare', el).onclick = (e) => busy(e.currentTarget, renderCompare);
+    $('#dash-lead', el).onclick = (e) => busy(e.currentTarget, async () => {
+      await send('leads:addByUsername', { username: current.profile.username });
+      e.currentTarget.textContent = 'Ajouté aux leads';
+    });
+  }
   $('#posts-list', el).onclick = (e) => {
     if (e.target.closest('a')) return;
     const t = e.target.closest('[data-code]');
@@ -151,6 +170,53 @@ function postsTable(list) {
     }).join('')}</tbody></table></div>`;
 }
 
+async function renderCompare() {
+  if (!mine) {
+    const r = await send('ig:stats', { username: '' });
+    mine = { profile: r.profile, stats: computeStats(r.profile, r.posts, r.snapshots) };
+  }
+  const a = mine.stats;
+  const b = current.stats;
+  const rows = [
+    ['Abonnés', a.followers, b.followers, fmtNum],
+    ['Taux d’engagement', a.engagementRate, b.engagementRate, (v) => fmtPct(v)],
+    ['J’aime moyens', a.avgLikes, b.avgLikes, fmtNum],
+    ['Commentaires moyens', a.avgComments, b.avgComments, fmtNum],
+    ['Publications / semaine', a.postsPerWeek, b.postsPerWeek, (v) => v.toFixed(1).replace('.', ',')],
+    ['Hashtags / publication', a.avgTagsPerPost, b.avgTagsPerPost, (v) => v.toFixed(1).replace('.', ',')],
+  ];
+  const best = (x, y) => (x === y ? '' : x > y ? 'me' : 'them');
+  const fmtType = (st) => Object.entries(st.byType).sort((x, y) => y[1].avgEr - x[1].avgEr)[0]?.[0];
+  $('#dash-compare-out', el).innerHTML = `<div class="card" style="margin-bottom:16px">
+    <h2>Toi vs @${escapeHtml(current.profile.username)}</h2>
+    <div class="table-wrap"><table class="compare-table">
+      <thead><tr><th></th><th>@${escapeHtml(mine.profile.username)} (toi)</th><th>@${escapeHtml(current.profile.username)}</th></tr></thead>
+      <tbody>${rows.map(([label, x, y, f]) => `<tr><td>${label}</td>
+        <td class="${best(x, y) === 'me' ? 'win' : ''}">${f(x || 0)}</td>
+        <td class="${best(x, y) === 'them' ? 'win' : ''}">${f(y || 0)}</td></tr>`).join('')}
+        <tr><td>Meilleur format</td><td>${TYPE_LABEL[fmtType(a)] || '—'}</td><td>${TYPE_LABEL[fmtType(b)] || '—'}</td></tr>
+        <tr><td>Meilleur créneau</td><td>${a.bestDay ? `${a.bestDay.label} ${a.bestHour?.label || ''}` : '—'}</td><td>${b.bestDay ? `${b.bestDay.label} ${b.bestHour?.label || ''}` : '—'}</td></tr>
+      </tbody></table></div>
+    <p class="muted" style="margin-top:10px">En vert : la meilleure valeur. L’engagement compte davantage que le nombre d’abonnés.</p>
+  </div>`;
+}
+
+async function rememberAnalysis(profile) {
+  const { [RECENT_KEY]: list = [] } = await chrome.storage.local.get(RECENT_KEY);
+  const next = [{ username: profile.username, pic: profile.pic, followers: profile.followers, at: Date.now() },
+    ...list.filter((x) => x.username.toLowerCase() !== profile.username.toLowerCase())].slice(0, 10);
+  await chrome.storage.local.set({ [RECENT_KEY]: next });
+  renderRecent();
+}
+
+async function renderRecent() {
+  const { [RECENT_KEY]: list = [] } = await chrome.storage.local.get(RECENT_KEY);
+  $('#dash-recent', el).innerHTML = list.length ? `<span class="muted" style="font-size:12px">Récemment analysés :</span>
+    ${list.map((x) => `<span class="chip click" data-user="${escapeHtml(x.username)}" title="${fmtNum(x.followers)} abonnés">
+      <span class="avatar" style="width:18px;height:18px;background-image:url('${escapeHtml(x.pic || '')}')"></span>@${escapeHtml(x.username)}
+      <button data-forget="${escapeHtml(x.username)}" title="Retirer">${icon('x', 11)}</button></span>`).join('')}` : '';
+}
+
 function sortPosts(kind) {
   const eng = (p) => p.likes + p.comments;
   const list = [...current.posts];
@@ -193,7 +259,9 @@ async function load(username = '') {
   body.innerHTML = '<div class="card empty"><span class="spinner"></span> Chargement des statistiques…</div>';
   try {
     const { profile, posts, snapshots, postsSource, postsError } = await send('ig:stats', { username });
-    current = { profile, posts, postsSource, stats: computeStats(profile, posts, snapshots) };
+    current = { profile, posts, postsSource, self: !username, stats: computeStats(profile, posts, snapshots) };
+    if (current.self) mine = current;
+    else rememberAnalysis(profile);
     const { bestDay, bestHour, byWeekday } = current.stats;
     if (!username && bestDay && bestHour) {
       // Réutilisé par la vue Publication pour suggérer un créneau.
@@ -222,27 +290,41 @@ export default {
         <div><h1>Statistiques</h1><p class="muted">Analyse de tes 36 derniers posts + historique quotidien des abonnés.</p></div>
         <div class="row">
           <button id="dash-post">${icon('sparkle', 16)} Analyser un post</button>
-          <form class="row" id="dash-form">
-            <input type="search" id="dash-user" placeholder="@concurrent (vide = mon compte)" style="width:240px" />
+          <form class="row search-account" id="dash-form">
+            <span class="search-ico">${icon('search', 16)}</span>
+            <input type="search" id="dash-user" placeholder="Analyser un autre compte : @nom" style="width:260px" />
             <button class="primary" type="submit">Analyser</button>
           </form>
         </div>
       </div>
+      <div class="row" id="dash-recent" style="margin:-10px 0 18px;gap:6px"></div>
       <div id="dash-body"></div>`;
-    $('#dash-form', el).onsubmit = (e) => { e.preventDefault(); load($('#dash-user', el).value.trim()); };
+    $('#dash-form', el).onsubmit = (e) => { e.preventDefault(); load($('#dash-user', el).value.trim().replace(/^@/, '')); };
     $('#dash-post', el).onclick = () => openPostInsight();
+    $('#dash-recent', el).onclick = async (e) => {
+      const forget = e.target.closest('[data-forget]');
+      if (forget) {
+        e.stopPropagation();
+        const { [RECENT_KEY]: list = [] } = await chrome.storage.local.get(RECENT_KEY);
+        await chrome.storage.local.set({ [RECENT_KEY]: list.filter((x) => x.username !== forget.dataset.forget) });
+        return renderRecent();
+      }
+      const chip = e.target.closest('[data-user]');
+      if (chip) { $('#dash-user', el).value = `@${chip.dataset.user}`; load(chip.dataset.user); }
+    };
+    renderRecent();
   },
   show([username = '', code = '']) {
     // #dashboard/p/<code> : analyse d'un post précis (bouton IA sur une publication Instagram).
     if (username === 'p' && code) {
       openPostInsight(code);
-      if (!current) load('').then(() => { if (current) current.self = true; });
+      if (!current) load('');
       return;
     }
     // #dashboard/<username> : analyse directe d'un autre compte (bouton « Analyser » sur Instagram).
     const user = decodeURIComponent(username);
-    if (current && (current.profile.username === user || (!user && current.self))) return;
+    if (current && ((user && current.profile.username.toLowerCase() === user.toLowerCase()) || (!user && current.self))) return;
     $('#dash-user', el).value = user ? `@${user}` : '';
-    load(user).then(() => { if (current) current.self = !user; });
+    load(user);
   },
 };

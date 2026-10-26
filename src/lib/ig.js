@@ -289,8 +289,13 @@ async function profileFromPage(username) {
     html.match(new RegExp(`<meta[^>]+content="([^"]*)"[^>]*(?:property|name)="${prop}"`, 'i')) || [])[1] || '');
   const counts = countsFromDescription(meta('og:description') || meta('description'));
   if (counts.length < 3) throw new IgError(`Profil @${username} introuvable`, { kind: 'notfound', status: 404 });
-  const json = (re) => { const m = html.match(re); try { return m ? JSON.parse(`"${m[1]}"`) : ''; } catch { return ''; } };
-  const pk = (html.match(new RegExp(`"id":"(\\d+)","username":"${username}"`)) || html.match(/"profile_id":"(\d+)"/) ||
+  // La page embarque aussi d'autres comptes (toi, suggestions…) : les indicateurs (privé,
+  // certifié, bio…) ne sont lus qu'autour de l'objet JSON du profil visé.
+  const nameRe = username.replace(/[.]/g, '\\.');
+  const at = html.search(new RegExp(`"username":"${nameRe}"`, 'i'));
+  const around = at >= 0 ? html.slice(Math.max(0, at - 2000), at + 2000) : '';
+  const json = (re) => { const m = around.match(re); try { return m ? JSON.parse(`"${m[1]}"`) : ''; } catch { return ''; } };
+  const pk = (html.match(new RegExp(`"id":"(\\d+)","username":"${nameRe}"`, 'i')) || html.match(/"profile_id":"(\d+)"/) ||
     html.match(/profilePage_(\d+)/) || [])[1] || '';
   const title = meta('og:title');
   return {
@@ -298,13 +303,13 @@ async function profileFromPage(username) {
     username,
     fullName: title.includes('(@') ? title.split('(@')[0].trim() : '',
     pic: meta('og:image'),
-    isPrivate: /"is_private":true/.test(html),
-    isVerified: /"is_verified":true/.test(html),
+    isPrivate: /"is_private":true/.test(around),
+    isVerified: /"is_verified":true/.test(around),
     bio: json(/"biography":"((?:[^"\\]|\\.)*)"/),
     followers: counts[0],
     following: counts[1],
     posts: counts[2],
-    isBusiness: /"is_business_account":true|"is_professional_account":true/.test(html),
+    isBusiness: /"is_business_account":true|"is_professional_account":true/.test(around),
     category: json(/"category_name":"((?:[^"\\]|\\.)*)"/),
     publicEmail: json(/"business_email":"((?:[^"\\]|\\.)*)"/),
     publicPhone: '',

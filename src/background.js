@@ -766,7 +766,8 @@ const handlers = {
     let posts = [];
     let postsSource = 'api';
     let postsError = '';
-    if (!profile.isPrivate || self || profile.followedByViewer) {
+    // Profil lu depuis la page : l'indicateur « privé » est moins fiable, on tente quand même.
+    if (!profile.isPrivate || self || profile.followedByViewer || profile.source === 'page') {
       try {
         posts = await ig.userFeed(profile.pk, { max: 36, username: profile.username });
       } catch (e) {
