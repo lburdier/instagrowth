@@ -1,151 +1,273 @@
-# InstaGrowth — extension Chrome Instagram Pro (inspirée d'Inssist)
+<div align="center">
 
-Instagram sur desktop : DM, publication avancée et programmation, statistiques avec revue IA,
-génération de leads, auto-like quotidien prudent. L'IA passe par Claude, OpenRouter (modèles gratuits) ou n'importe quel endpoint compatible OpenAI.
+<img src="icons/icon128.png" width="96" alt="InstaGrowth">
+
+# InstaGrowth
+
+**Extension Chrome qui ajoute des outils de croissance directement dans Instagram :**
+statistiques et analyse IA de tes publications, programmation, leads, auto-like vérifié, téléchargement, mode fantôme pour les stories.
+
+[Télécharger la dernière version](../../releases/latest) · [Installation](#installation) · [Visite guidée](#visite-guidée) · [Dépannage](#dépannage)
+
+<img src="docs/screenshots/instagram-profile.png" alt="Le bouton InstaGrowth et son menu sur un profil" width="900">
+
+</div>
+
+> Les captures de cette page utilisent des **données de démonstration** (comptes et chiffres fictifs). Les vues « sur Instagram » sont présentées sur une maquette générique, pour montrer où l'extension ajoute ses boutons.
+
+---
+
+## Sommaire
+
+- [Installation](#installation)
+- [Premiers pas](#premiers-pas)
+- [Visite guidée](#visite-guidée)
+  - [Dans Instagram](#dans-instagram)
+  - [Statistiques et publications récentes](#statistiques-et-publications-récentes)
+  - [Analyse IA d'une publication](#analyse-ia-dune-publication)
+  - [Analyser un autre compte](#analyser-un-autre-compte)
+  - [Auto-like](#auto-like)
+  - [Automatisations](#automatisations)
+  - [Publication et programmation](#publication-et-programmation)
+  - [Leads](#leads)
+  - [Réglages et IA](#réglages-et-ia)
+  - [Popup](#popup)
+- [Sécurité du compte et limites](#sécurité-du-compte-et-limites)
+- [Dépannage](#dépannage)
+- [Confidentialité](#confidentialité)
+- [Pour les développeurs](#pour-les-développeurs)
+
+---
 
 ## Installation
 
-### Depuis une release (le plus simple)
+InstaGrowth n'est pas publiée sur le Chrome Web Store : elle s'installe en **mode développeur**, en 2 minutes. Ça marche avec Chrome, Edge, Brave, Comet et tout navigateur basé sur Chromium.
 
-1. Télécharge `instagrowth-vX.Y.Z.zip` dans la [dernière release](../../releases/latest) et décompresse-le dans un dossier.
-2. Ouvre `chrome://extensions` (ou `edge://extensions`), active le **Mode développeur**.
-3. Clique sur **Charger l'extension non empaquetée** et sélectionne le dossier décompressé.
+### 1. Télécharger l'extension
 
-### Depuis les sources (mode développeur)
+1. Ouvre la page des [releases](../../releases/latest).
+2. Dans **Assets**, télécharge `instagrowth-vX.Y.Z.zip` (le numéro le plus récent).
+3. **Décompresse** le fichier : clic droit sur le zip, puis « Extraire tout… ». Tu obtiens un dossier qui contient `manifest.json`, `icons/` et `src/`.
+4. Range ce dossier à un endroit où il restera, par exemple `Documents/InstaGrowth`. **Ne le supprime pas** : le navigateur charge l'extension depuis ce dossier.
 
-1. Ouvre `chrome://extensions` (ou `edge://extensions`).
-2. Active le **Mode développeur**.
-3. Clique sur **Charger l'extension non empaquetée** et sélectionne ce dossier (`INSTAGROWTH`).
-4. Connecte-toi à Instagram sur https://www.instagram.com dans le même navigateur.
-5. La page **Réglages & IA** s'ouvre : choisis ton fournisseur d'IA et remplis ton profil de marque.
+### 2. Charger l'extension dans le navigateur
 
-Il n'y a aucune étape de build : JavaScript natif (modules ES) et aucune dépendance.
+1. Ouvre la page des extensions :
+   - Chrome, Brave ou Comet : tape `chrome://extensions` dans la barre d'adresse ;
+   - Edge : tape `edge://extensions`.
+2. Active **Mode développeur** : l'interrupteur en haut à droite (dans la barre de gauche sur Edge).
+3. Clique sur **Charger l'extension non empaquetée**.
+4. Sélectionne le dossier décompressé, celui qui contient `manifest.json`.
+5. La carte **InstaGrowth** apparaît. Clique sur l'icône puzzle de la barre d'outils, puis sur l'épingle à côté d'InstaGrowth, pour garder son icône visible.
 
-## Fonctionnalités
+> À la première installation, la page **Réglages & IA** s'ouvre automatiquement.
 
-| Onglet | Ce qu'il fait |
-|---|---|
-| 📊 **Statistiques** | Taux d'engagement comparé à des repères par taille de compte, likes/commentaires moyens, rythme de publication, croissance (un snapshot par jour), engagement par jour, heure, format et longueur de légende, hashtags, top posts. **Revue IA** : note, forces, faiblesses, plan sur 30 jours, idées de posts. Fonctionne aussi sur un compte concurrent public. |
-| 🗓️ **Publication** | Photos, carrousels (10 max) et vidéos ; recadrage 1:1, 4:5, 1.91:1 ou original ; réordonnancement par glisser-déposer ; compteurs (2200 caractères, 30 hashtags) ; aperçu fidèle ; 1er commentaire ; brouillons ; **calendrier éditorial** ; suggestion du meilleur créneau d'après tes stats. IA : 3 légendes selon un brief, réécritures (améliorer, raccourcir, CTA, emojis, traduction), hashtags sur 3 niveaux avec leur volume réel, sets de hashtags enregistrés. |
-| 💬 **Messages** | Tes DM Instagram dans un cadre mobile, réponses rapides (modèles), assistant IA qui propose 3 réponses et les insère dans la conversation. |
-| 🎯 **Leads** | Recherche par hashtag, abonnés d'un concurrent, likers d'un post ou import d'une liste ; filtres (abonnés, mots-clés dans la bio, exclusions, comptes pro, email ou téléphone) ; extraction des contacts ; mini-CRM (Nouveau → Liké → Chaud 🔥 → Contacté → A répondu → Gagné/Perdu) ; scoring IA ; message d'approche IA personnalisé ; notes ; export CSV ; bouton **＋ Lead** directement sur les profils instagram.com. |
-| ❤️ **Auto-like** | Like quotidien des posts de ton audience cible (hashtags et abonnés de concurrents). Chaque compte liké devient un lead, puis on vérifie chaque jour s'il t'a suivi en retour (il passe alors en lead **chaud** et tu reçois une notification). |
-| 📱 **Insta mobile** | L'interface mobile d'Instagram dans le navigateur, comme Inssist, pour publier stories et reels depuis le PC. |
+### 3. Mettre à jour
 
-## Intégration native dans instagram.com
+1. Télécharge et décompresse le nouveau zip.
+2. Remplace le contenu de ton dossier InstaGrowth par les nouveaux fichiers. Tes données (réglages, leads, historique) sont conservées : elles sont stockées dans le navigateur, pas dans le dossier.
+3. Dans `chrome://extensions`, clique sur ⟳ (**Recharger**) sur la carte InstaGrowth.
+4. **Recharge tes onglets Instagram** (F5) : les pages déjà ouvertes gardent l'ancienne version.
 
-InstaGrowth s'intègre directement dans l'interface d'Instagram, en clonant les éléments natifs pour en reprendre le style exact (thème clair ou sombre, sans bordures) :
+### Désinstaller
 
-- **Navigation latérale** : une entrée « InstaGrowth » sous « Découvrir », qui ouvre un menu (Statistiques, Programmer un post, Leads, Auto-like, Réglages).
-- **Ton profil** : un bouton bleu « InstaGrowth » à côté de « Modifier le profil », avec le même menu.
-- **Les autres profils** : les boutons « Analyser » (stats et revue IA du compte) et « Lead » à côté de « Suivre » et « Message ».
-- **Publications** : une icône IA dans la barre J'aime / Commenter / Partager, qui propose 3 commentaires et les insère dans le champ de commentaire.
-- **Messages privés** : une icône IA dans la zone de saisie, qui lit les derniers messages et propose 3 réponses.
+Dans `chrome://extensions`, clique sur **Supprimer** sur la carte InstaGrowth. Toutes les données de l'extension sont effacées du navigateur.
 
-Chaque outil s'ouvre dans une fenêtre au style d'Instagram, par-dessus le site (le dashboard en mode intégré). Le dashboard complet reste disponible dans son propre onglet.
-Le code se trouve dans `src/content/inject/` (`nav.js`, `profile.js`, `post.js`, `dm.js`, `panel.js`). Les icônes SVG partagées sont dans `src/lib/icons.js`.
+---
 
-## Publications récentes
+## Premiers pas
 
-Dans **Statistiques**, le tableau **Publications récentes** liste tes dernières publications : date, format, j'aime, commentaires, vues, taux d'engagement et écart par rapport à ta moyenne. Tu peux les trier (Récentes / Top / Flops), passer en vue grille, et ouvrir l'analyse IA de chacune.
+1. **Connecte-toi à Instagram** sur [instagram.com](https://www.instagram.com) dans ce navigateur. InstaGrowth utilise ta session, aucun mot de passe n'est demandé.
+2. **Garde un onglet instagram.com ouvert** : c'est par lui que passent les requêtes, exactement comme le site.
+3. **Connecte une IA** dans **Réglages & IA** : clique sur **Se connecter avec Claude** ou colle ta clé, ou connecte **OpenRouter** pour utiliser des modèles gratuits.
+4. Remplis ton **profil de marque** (niche, audience, ton, offre) : l'IA s'en sert pour toutes ses suggestions.
+5. Sur ton profil Instagram, clique sur le bouton bleu **InstaGrowth**.
 
-Pour récupérer ces publications, l'extension essaie d'abord l'API web d'Instagram. Si elle est limitée, elle se rabat sur les publications que les pages Instagram chargent elles-mêmes (`src/content/ig-capture.js`, sans aucune requête en plus). En dernier recours, elle ouvre ton profil dans un onglet d'arrière-plan le temps de les lire.
+---
 
-## Analyse d'un post existant
+## Visite guidée
 
-Tu peux analyser n'importe quel post (le tien ou celui d'un concurrent) :
-- dans **Statistiques**, en cliquant sur un post de la grille (tri Top / Récents / Flops) ou sur **Analyser un post** pour coller un lien ;
-- sur Instagram, depuis le bouton IA d'une publication (**Analyser ce post**) ou le bouton **Analyser** qui apparaît au survol des miniatures de ton profil.
+### Dans Instagram
 
-Tu obtiens les chiffres du post comparés à la moyenne de tes 12 derniers posts, puis un diagnostic IA : note, raisons de la performance, critique de l'accroche, hashtags et horaire, 3 légendes réécrites et des idées pour recycler le post.
+<img src="docs/screenshots/instagram-profile.png" alt="Bouton InstaGrowth sur le profil" width="900">
 
-## Suivi de l'auto-like
+InstaGrowth s'intègre à l'interface d'Instagram, dans son style (thème clair ou sombre) :
 
-L'onglet **Auto-like** a quatre vues : **Vue d'ensemble** (statut en direct, derniers comptes likés, prochaines cibles), **Comptes likés** (liste détaillée filtrable : abonnés, post liké, source, date, follow-back, statut de lead, export CSV), **Réglages** et **Journal**.
-En option (Auto-like → Réglages → **Notification à chaque like**), l'extension te prévient à chaque like confirmé : notification du système, ou petite bulle dans Instagram.
+- **Navigation de gauche** : une entrée **InstaGrowth** ouvre le menu des outils.
+- **Ton profil** : un bouton bleu **InstaGrowth** à côté de « Modifier le profil ». Il donne accès aux Statistiques, à la Programmation, aux Leads, à l'Auto-like, aux Réglages et au **mode fantôme**.
+- **Profils des autres comptes** : boutons **Analyser** (statistiques et revue IA du compte) et **Lead** (ajout à ton CRM).
+- **Grille de ton profil** : au survol d'une miniature, un bouton **Analyser** ouvre l'analyse IA de la publication.
 
-Le bouton **Liker maintenant** lance un passage immédiat, hors plage horaire mais dans le respect des plafonds.
+Chaque outil s'ouvre dans une fenêtre par-dessus Instagram, sans quitter la page.
 
-## Téléchargement des publications
+<img src="docs/screenshots/instagram-post.png" alt="Boutons IA et Télécharger sous une publication" width="900">
 
-Sur chaque publication, une icône **Télécharger** a été ajoutée à la barre J'aime / Commenter / Partager. Elle récupère les fichiers en meilleure qualité : photo, chaque slide d'un carrousel, vidéo ou reel. Ils sont enregistrés dans le dossier `Téléchargements/InstaGrowth/`, sous des noms comme `compte_code_1.jpg`. Si l'API ne répond pas, ce sont les images visibles sur la page qui sont téléchargées.
+Sous chaque publication, deux icônes rejoignent J'aime, Commenter et Partager :
 
-## Mode fantôme stories
+- **IA** (étincelle) : **Analyser ce post**, ou **Suggérer un commentaire**. L'IA propose 3 commentaires adaptés à la publication, et un clic insère celui que tu choisis dans le champ (tu l'envoies toi-même).
+- **Télécharger** (flèche) : enregistre la photo, toutes les slides d'un carrousel ou la vidéo, en meilleure qualité, dans `Téléchargements/InstaGrowth/`.
 
-Le mode fantôme permet de regarder les stories sans apparaître dans la liste des vues. Il s'active depuis le menu InstaGrowth sur Instagram, la popup de l'extension ou Réglages & IA.
-Pendant la lecture, un badge « Mode fantôme » indique le nombre de vues masquées ; un clic dessus désactive le mode. L'extension bloque uniquement la requête « story vue » qu'Instagram envoie, en lui renvoyant une réponse factice. Les « vu » des messages privés et des notifications ne sont pas touchés.
+Dans les **messages privés**, une icône IA dans la zone de saisie lit les derniers messages et propose 3 réponses.
 
-## Automatisations d'auto-like
+**Mode fantôme stories** : une fois activé (menu InstaGrowth, popup ou Réglages), tu regardes les stories sans apparaître dans la liste des vues. Un badge « Mode fantôme » s'affiche pendant la lecture. Seul l'accusé « story vue » est bloqué : tes messages et notifications fonctionnent normalement.
 
-Dans **Auto-like → Automatisations**, chaque règle s'active séparément et ajoute des cibles **prioritaires** dans la file. Ces cibles passent par les mêmes plafonds, délais, plage horaire et jours actifs que le reste :
-- **Liker mes nouveaux abonnés** : like la dernière publication de chaque nouvel abonné.
+### Statistiques et publications récentes
+
+<img src="docs/screenshots/dashboard.png" alt="Statistiques et tableau des publications récentes" width="900">
+
+- **Chiffres clés** : abonnés (évolution sur 7 et 30 jours, à partir d'un relevé par jour), taux d'engagement comparé à des repères selon ta taille, j'aime et commentaires moyens, rythme de publication.
+- **Publications récentes** : chaque publication avec sa date, son format, ses j'aime, commentaires, vues, son taux d'engagement et son **écart par rapport à ta moyenne** (en vert au-dessus, en rouge en dessous). Tri Récentes, Top ou Flops, vue tableau ou grille.
+- Plus bas : courbe d'abonnés, diagnostic express, engagement par jour et par heure, performances par format et par longueur de légende, hashtags, et une **revue IA** complète du compte (note, forces, faiblesses, plan d'action sur 30 jours, idées de posts).
+
+### Analyse IA d'une publication
+
+<img src="docs/screenshots/post-analysis.png" alt="Analyse IA d'une publication" width="900">
+
+Clique sur une publication du tableau, sur **Analyser un post** (pour coller un lien), ou sur le bouton IA d'une publication Instagram. Tu obtiens :
+
+- les chiffres de la publication **comparés à ta moyenne** ;
+- un **diagnostic IA** : note sur 10, pourquoi elle a marché ou non, critique de l'accroche et de la légende, hashtags et horaire, **3 légendes réécrites**, idées pour la recycler (reel, story, suite).
+
+### Analyser un autre compte
+
+<img src="docs/screenshots/compare.png" alt="Comparaison avec un autre compte" width="900">
+
+Dans **Statistiques**, tape `@nom` dans **Analyser un autre compte**, ou clique sur **Analyser** depuis son profil Instagram. Les comptes récemment analysés restent accessibles en un clic.
+
+- **Comparer avec mon compte** : toi face à ce compte (abonnés, engagement, j'aime et commentaires moyens, rythme, hashtags, meilleur format, meilleur créneau). La meilleure valeur est en vert.
+- **Ajouter aux leads** : l'ajoute à ton CRM.
+
+### Auto-like
+
+<img src="docs/screenshots/autolike.png" alt="Vue d'ensemble de l'auto-like" width="900">
+
+L'auto-like like chaque jour des publications de ton audience cible (hashtags de ta niche, abonnés de comptes concurrents), pour te faire découvrir et générer des leads.
+
+- **Vue d'ensemble** : likes du jour face à la limite, statut en direct, prochain like, file d'attente, historique sur 14 jours, derniers comptes likés. Le bouton **Liker maintenant** lance un passage immédiat.
+- **Chaque like est réel et vérifié** : il n'est compté que si Instagram le confirme.
+- Option **Notification à chaque like** : notification du système, ou petite bulle dans Instagram.
+
+<img src="docs/screenshots/autolike-liked.png" alt="Liste détaillée des comptes likés" width="900">
+
+L'onglet **Comptes likés** liste chaque compte liké : abonnés, publication likée, source, date, mention « vérifié », **follow-back** (t'a suivi, pas encore, à vérifier) et statut de lead. Un clic sur une ligne affiche la bio et les compteurs. Tu peux filtrer par période, source et follow-back, et exporter en CSV.
+
+### Automatisations
+
+<img src="docs/screenshots/automations.png" alt="Automatisations de l'auto-like" width="900">
+
+Des règles à activer une par une. Elles ajoutent des cibles prioritaires dans la file, avec les mêmes plafonds et délais :
+
+- **Liker mes nouveaux abonnés** : un merci discret à chaque nouvel abonné.
 - **Rendre les likes** : like une publication des personnes qui ont liké ta dernière publication.
-- **Comptes VIP** : like chaque nouvelle publication des comptes de ta liste.
-- **Entretenir mes leads** : like régulièrement les publications de tes leads chauds ou contactés.
+- **Comptes VIP** : like chaque nouvelle publication de tes partenaires, clients ou influenceurs.
+- **Entretenir mes leads** : like régulièrement tes leads chauds ou contactés.
 
-Les règles tournent toutes les 30 minutes ; le bouton **Lancer maintenant** déclenche une règle tout de suite. Les **jours actifs** se règlent dans Auto-like → Réglages.
+Chaque règle a sa fréquence, son nombre maximum par passage, un bouton **Lancer maintenant** et l'heure de son dernier passage. Les jours actifs et la plage horaire se règlent dans **Auto-like → Réglages**.
 
-**Chaque like est réel et vérifié** : il n'est compté que si Instagram le confirme. Soit la publication apparaît comme likée par toi (`has_liked`), soit le cœur est bien passé au rouge sur la page. Dans la liste des comptes likés, ces likes portent la mention « vérifié ».
+### Publication et programmation
 
-Si l'adresse de like d'Instagram change (erreur 404), l'extension essaie d'autres routes connues. Si aucune ne marche, elle ouvre la publication dans un onglet épinglé d'arrière-plan et clique sur le vrai bouton « J'aime ».
+<img src="docs/screenshots/publisher.png" alt="Éditeur de publication avec assistant IA" width="900">
 
-## Plusieurs comptes Instagram
+- **Médias** : photos, carrousels (jusqu'à 10) et vidéos, recadrage 1:1, 4:5, 1.91:1 ou original, réordonnables par glisser-déposer.
+- **Légende** : compteurs (2 200 caractères, 30 hashtags), **aperçu fidèle** du rendu, premier commentaire, sets de hashtags.
+- **Assistant IA** : 3 légendes à partir d'un brief et d'un style, réécriture (améliorer, raccourcir, ajouter un CTA, des emojis, traduire), hashtags sur trois niveaux avec leur volume réel.
+- **Programmation** : suggestion de ton **meilleur créneau** d'après tes statistiques, calendrier éditorial, brouillons. Par défaut, tu reçois une **notification** à l'heure prévue. La publication automatique des photos est disponible en option (expérimentale). Les reels et vidéos se publient via **Insta mobile**.
 
-Les données sont séparées par compte Instagram connecté : état de l'auto-like (comptes likés, compteurs, file d'attente, automatisations), relevés d'abonnés et tâches quotidiennes.
-Les leads et les posts programmés sont rattachés au compte qui les a créés. Un post programmé n'est jamais publié sur un autre compte : l'extension te prévient de te connecter au bon compte.
-Les données enregistrées avant la v0.7.0 sont rattachées au dernier compte utilisé.
+### Leads
 
-## IA : connexion
+<img src="docs/screenshots/leads.png" alt="Recherche de leads et mini-CRM" width="900">
 
-- **Claude (Anthropic)** : bouton **Se connecter avec Claude** dans Réglages. La console Claude (platform.claude.com) s'ouvre ; tu crées une clé, puis tu cliques sur **Connecter à InstaGrowth** dans la carte qui s'affiche. La clé est vérifiée auprès d'Anthropic, l'onglet se ferme et tu reviens à InstaGrowth. Tu peux aussi coller une clé, ou un **jeton OAuth** (Bearer), dans « Options avancées ».
-  Anthropic ne propose pas de bouton « Se connecter avec Claude » pour les applications tierces. Le mode OAuth prend donc
-  un jeton d'accès court obtenu avec la CLI `ant` (`ant auth login` puis `ant auth print-credentials --access-token`).
-  Modèle par défaut : `claude-opus-5-5`. Sonnet 5.5, Haiku 5.5 et Fable 5.1 sont aussi disponibles.
-- **OpenRouter** : vraie connexion **OAuth PKCE en un clic** (`chrome.identity`), avec la liste des modèles gratuits (`:free`) chargée en direct.
-- **Compatible OpenAI** : Ollama ou LM Studio en local, Groq, Mistral… L'autorisation d'accès à l'hôte est demandée à l'enregistrement.
+- **Trouver des leads** : par hashtag, parmi les abonnés d'un concurrent, les personnes qui ont liké une publication, ou en important une liste. Filtres sur les abonnés, les mots-clés de la bio, les comptes pro et la présence d'un email ou d'un téléphone.
+- **Mini-CRM** : statut (Nouveau, Liké, Chaud, Contacté, A répondu, Gagné, Perdu), **score IA** sur 100, contacts extraits de la bio, notes, export CSV.
+- **Message d'approche IA** personnalisé pour chaque lead. L'envoi reste manuel, volontairement : les messages automatiques sont la première cause de blocage.
 
-Les clés restent dans `chrome.storage.local` et ne sont envoyées qu'au fournisseur choisi.
+### Réglages et IA
 
-## Limites et sécurité du compte
+<img src="docs/screenshots/settings.png" alt="Réglages : fournisseur d'IA, marque, mode fantôme" width="900">
 
-Instagram **n'a aucune API officielle pour liker** ni pour lire les hashtags ou les abonnés : l'API Graph de Meta ne le permet pas.
-L'extension utilise donc l'**API web** d'instagram.com avec ta session, comme le font Inssist et les outils du même type. Garde-fous en place :
+- **Claude (Anthropic)** : clique sur **Se connecter avec Claude**. La console Claude s'ouvre, tu crées une clé et tu cliques sur **Connecter à InstaGrowth** dans la carte qui apparaît. Tu peux aussi coller directement une clé `sk-ant-…`. Modèles proposés : Opus 5.5 (par défaut), Sonnet 5.5, Haiku 5.5 et Fable 5.1.
+- **OpenRouter** : connexion en un clic (OAuth), avec la liste des **modèles gratuits**.
+- **Compatible OpenAI** : Ollama ou LM Studio en local, Groq, Mistral…
+- **Profil de marque**, mode de **publication programmée**, **mode fantôme**, export ou remise à zéro des données.
 
-- Plafonds durs, non modifiables depuis l'interface : **200 likes/jour, 40/heure, 30 s minimum entre deux likes, 180 lectures/heure** (`src/lib/limits.js`).
-- Préréglages : Prudent (60/j), Normal (100/j), Actif (150/j). **Warm-up** sur 7 jours (20 → 100).
-- Délais aléatoires, « pauses café » aléatoires, plage horaire active, ordre des cibles mélangé, un seul like par personne sur 30 jours.
-- **Arrêt automatique** dès qu'Instagram envoie un signal : 429 (pause de 2 h), `feedback_required` ou action bloquée (24 h), checkpoint (48 h).
-- Les DM ne sont **jamais envoyés automatiquement** : l'IA rédige, tu envoies.
+### Popup
 
-> ⚠️ L'automatisation va à l'encontre des conditions d'utilisation d'Instagram et peut entraîner un blocage temporaire, voire une suspension. Utilise-la avec modération ; tu restes responsable de ton compte.
+<img src="docs/screenshots/popup.png" alt="Popup de l'extension" width="300">
 
-La **publication automatique** des posts programmés (photos et carrousels) passe par l'API web d'upload. Elle est expérimentale et désactivée par défaut :
-le mode « rappel » envoie une notification à l'heure prévue. Les vidéos et les reels se publient depuis **Insta mobile**.
+L'icône de la barre d'outils affiche ton compte, l'état de l'auto-like (likes du jour), le mode fantôme, le prochain post programmé, et des raccourcis vers chaque outil.
 
-## Architecture
+### Plusieurs comptes Instagram
+
+Les données sont **séparées par compte** : auto-like, comptes likés, automatisations, relevés d'abonnés. Les leads et les posts programmés sont rattachés au compte qui les a créés, et **un post n'est jamais publié sur un autre compte**.
+
+---
+
+## Sécurité du compte et limites
+
+Instagram ne propose **aucune API officielle** pour liker, ni pour lire les hashtags ou les abonnés. InstaGrowth utilise donc l'**API web** d'instagram.com avec ta session, comme les autres outils de ce type. Garde-fous intégrés :
+
+- **Plafonds stricts**, non modifiables : 200 likes par jour, 40 par heure, 30 s minimum entre deux likes, 180 lectures par heure.
+- **Préréglages** Prudent (60 par jour), Normal (100) et Actif (150), avec une **montée en charge progressive** sur 7 jours.
+- **Comportement humain** : délais aléatoires, pauses naturelles, plage horaire et jours actifs, ordre des cibles mélangé, un seul like par personne sur 30 jours.
+- **Arrêt automatique** au moindre signal d'Instagram : limite de requêtes (pause de 2 h), action bloquée (24 h), vérification de sécurité (48 h).
+- Les messages privés ne sont **jamais envoyés automatiquement**.
+
+> **Important.** L'automatisation (auto-like, publication automatique) va à l'encontre des conditions d'utilisation d'Instagram et peut entraîner un blocage temporaire, voire une suspension. Utilise-la avec modération : tu restes responsable de ton compte. Télécharge uniquement des contenus que tu as le droit de réutiliser.
+
+---
+
+## Dépannage
+
+**« Non connecté à Instagram » alors que je suis connecté**
+Recharge l'onglet instagram.com et laisse-le ouvert. Depuis la v0.6.3, l'extension détecte mieux la session et reprend toute seule. Si besoin, clique sur **Réessayer maintenant**.
+
+**« Instagram limite temporairement cette requête (429) »**
+Instagram limite certaines requêtes. L'extension se met en pause sur cette requête pendant 15 minutes et passe par une méthode de secours quand elle existe. Attends un peu, puis réessaie.
+
+**« Like non confirmé par Instagram : non compté »**
+Le like n'a pas été enregistré, il n'est donc pas compté. Le journal (Auto-like → Journal) indique les icônes vues sur la page : ouvre une issue avec cette ligne si le problème persiste. Quand le journal indique « clic sur la page », un onglet Instagram épinglé est ouvert en arrière-plan : laisse-le ouvert.
+
+**Les boutons InstaGrowth n'apparaissent pas sur Instagram**
+Recharge la page Instagram (F5). Si tu viens de mettre à jour l'extension, recharge-la aussi dans `chrome://extensions`. Une autre extension Instagram (Inssist, etc.) peut entrer en conflit : désactive-la un moment pour vérifier.
+
+**Les statistiques n'affichent aucune publication**
+Ouvre ton profil sur instagram.com, attends que les publications s'affichent, puis relance l'analyse. L'extension récupère aussi les publications chargées par la page.
+
+**Une erreur s'affiche dans `chrome://extensions`**
+Clique sur **Erreurs** sur la carte InstaGrowth, copie le message et ouvre une [issue](../../issues).
+
+---
+
+## Confidentialité
+
+- Tout est stocké **localement dans ton navigateur** : réglages, leads, historique, clés d'IA.
+- Rien n'est envoyé ailleurs qu'à **Instagram**, via ta propre session, et au **fournisseur d'IA** que tu choisis.
+- Aucun serveur InstaGrowth, aucun compte à créer, aucune collecte de données.
+
+---
+
+## Pour les développeurs
+
+Extension **Manifest V3** en JavaScript natif (modules ES), sans dépendance ni étape de build. Pour la charger depuis les sources, clone le dépôt puis utilise « Charger l'extension non empaquetée » sur le dossier racine.
 
 ```
-manifest.json                  MV3
-src/background.js              service worker : règles DNR, routeur de messages, moteur d'auto-like,
-                               recherche de leads, follow-backs, snapshots quotidiens, alarmes de publication
+manifest.json                  Manifest V3
+src/background.js              service worker : moteur d'auto-like, automatisations, leads, follow-backs,
+                               relevés quotidiens, programmation, téléchargements, comptes multiples
 src/lib/ig.js                  client de l'API web Instagram (tous les endpoints non officiels sont ici)
 src/lib/ai.js                  Claude / OpenRouter (OAuth PKCE) / compatible OpenAI
-src/lib/stats.js               calcul des statistiques et diagnostics locaux
+src/lib/stats.js               calcul des statistiques et diagnostics
 src/lib/limits.js              quotas et pauses
+src/lib/icons.js               jeu d'icônes SVG
 src/lib/store.js, db.js        chrome.storage (réglages) + IndexedDB (leads, posts et médias)
 src/app/                       dashboard (une vue par onglet dans views/)
 src/popup/                     popup de l'icône
-src/content/ig-mobile.js       (monde MAIN) se fait passer pour un iPhone dans le cadre « téléphone »
-src/content/ig-ui.js           pont réseau (requêtes API depuis instagram.com) + chargeur de l'intégration
-src/content/inject/            intégration native : navigation, profil, posts, DM, fenêtre modale
-src/lib/icons.js               jeu d'icônes SVG
+src/content/ig-ui.js           pont réseau (requêtes depuis instagram.com), like par clic, chargeur
+src/content/ig-capture.js      (monde MAIN) lecture des publications chargées par la page, mode fantôme
+src/content/inject/            intégration dans Instagram : navigation, profil, publications, grille, DM, fenêtre
+src/content/claude-connect.js  connexion Claude depuis la console
 ```
 
-Points techniques :
-- Les appels à l'API Instagram sont **exécutés par le content script d'un onglet instagram.com**, donc depuis la même origine, avec les mêmes cookies et en-têtes que le site. Le service worker ne fait que les lui transmettre. S'il n'y a aucun onglet Instagram ouvert, un onglet épinglé est ouvert en arrière-plan.
-- Le cadre mobile ne retire `X-Frame-Options`/CSP et ne force un User-Agent iPhone **que pour l'onglet du dashboard**, avec des règles de session propres à cet onglet.
-- L'auto-like tourne sur `chrome.alarms` (une vérification par minute) : il continue tant que le navigateur est ouvert, même si le dashboard est fermé.
-
-## Maintenance
-
-Instagram modifie régulièrement son API web. Si une fonction ne marche plus (stats, hashtags, like…), les endpoints à mettre à jour se trouvent tous dans `src/lib/ig.js`.
+- Les requêtes vers l'API Instagram sont exécutées par le content script d'un onglet instagram.com : même origine, mêmes cookies, mêmes en-têtes que le site.
+- L'auto-like tourne sur `chrome.alarms`, à raison d'une vérification par minute. Il continue tant que le navigateur est ouvert.
+- Instagram modifie régulièrement son API web. Si une fonction cesse de marcher, les endpoints sont tous dans `src/lib/ig.js`.

@@ -36,6 +36,8 @@
 }
 
 * { box-sizing: border-box; }
+/* L'attribut hidden doit toujours l'emporter (les boutons ont un display explicite). */
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   font: 400 14px/18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
