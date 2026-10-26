@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { Store } from '../core/store.js';
 import { Engine } from '../core/engine.js';
 import { listOpenRouterVisionModels, testAi } from '../core/agent.js';
+import { Updater } from './updater.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(here, '..', '..');
@@ -22,6 +23,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 
 let win = null;
 let engine = null;
+let updater = null;
 
 // --- Images -----------------------------------------------------------------
 
@@ -186,6 +188,11 @@ const API = {
   openExternal: (url) => (/^https:\/\//.test(url) ? shell.openExternal(url) : null),
   openDataFolder: () => shell.openPath(app.getPath('userData')),
   dataFolder: () => app.getPath('userData'),
+  appVersion: () => app.getVersion(),
+  updateState: () => updater.state,
+  updateCheck: () => updater.check(),
+  updateDownload: () => updater.download(),
+  updateInstall: () => updater.install(),
 };
 
 ipcMain.handle('igg', async (_e, method, args) => {
@@ -210,6 +217,9 @@ app.whenReady().then(async () => {
   engine.setLive(true);
   setInterval(() => engine.pollDevices().catch(() => {}), 4000);
 
+  updater = new Updater({ app, send, log: (l, m) => engine.log(l, m) });
+  if (!flag('shot')) updater.start();
+
   globalShortcut.register('CommandOrControl+Alt+X', () => {
     engine.stop();
     send({ type: 'log', level: 'warn', msg: 'Arrêt d’urgence (Ctrl+Alt+X).', t: Date.now() });
@@ -219,7 +229,16 @@ app.whenReady().then(async () => {
   if (flag('shot')) {
     const out = flagValue('shot') || path.join(app.getPath('temp'), 'instagrowth-shot.png');
     await new Promise((r) => setTimeout(r, 2500));
-    if (flagValue('demo') === 'agent') {
+    if (flagValue('demo') === 'update') {
+      // Test du circuit de mise à jour contre un serveur local (IGG_UPDATE_API / IGG_UPDATE_FEED).
+      await updater.check();
+      if (updater.state.status === 'available') {
+        await updater.download().catch((e) => console.error('maj :', e.message));
+        for (let i = 0; i < 240 && !['ready', 'error'].includes(updater.state.status); i++) await new Promise((r) => setTimeout(r, 500));
+      }
+      console.log('maj :', JSON.stringify({ status: updater.state.status, version: updater.state.version, error: updater.state.error }));
+      await new Promise((r) => setTimeout(r, 800));
+    } else if (flagValue('demo') === 'agent') {
       // Démo de l'agent contre un faux serveur (IGG_ANTHROPIC_BASE_URL), jamais avec une vraie clé.
       if (!process.env.IGG_ANTHROPIC_BASE_URL) throw new Error('--demo=agent demande IGG_ANTHROPIC_BASE_URL (scripts/mock-claude.mjs).');
       engine.saveSettings({ ai: { provider: 'anthropic', anthropic: { apiKey: 'sk-ant-demo-local' } } });

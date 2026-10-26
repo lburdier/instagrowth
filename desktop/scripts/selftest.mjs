@@ -16,6 +16,7 @@ import { LimitGuard, effectiveDailyLimit } from '../src/core/limits.js';
 import { AdbClient, findAdb, toAscii } from '../src/core/adb.js';
 import { parseCount } from '../src/core/bot.js';
 import { startMock } from './mock-claude.mjs';
+import { newer, pickDesktopRelease } from '../src/core/version.js';
 
 let pass = 0;
 let fail = 0;
@@ -50,6 +51,19 @@ section('Arbre UI et utilitaires');
   check('saisie ASCII sans accents', toAscii('Ça va, Élise ? « top »…') === 'Ca va, Elise ? "top"...');
   const png = await sim.screencap();
   check('capture PNG du simulateur', png.subarray(1, 4).toString() === 'PNG');
+}
+
+section('Mises à jour');
+{
+  check('comparaison de versions', newer('0.1.1', '0.1.0') && newer('0.10.0', '0.9.9') && !newer('0.1.0', '0.1.0') && !newer('0.1.0', '0.2.0'));
+  const best = pickDesktopRelease([
+    { tag_name: 'v0.9.9', draft: false, prerelease: false, assets: [] },
+    { tag_name: 'desktop-v0.3.0', draft: true, prerelease: false, assets: [] },
+    { tag_name: 'desktop-v0.2.1', draft: false, prerelease: true, assets: [] },
+    { tag_name: 'desktop-v0.2.0', draft: false, prerelease: false, assets: [{ name: 'latest.yml' }] },
+    { tag_name: 'desktop-v0.1.5', draft: false, prerelease: false, assets: [] },
+  ]);
+  check('release desktop choisie (extension, brouillons et préversions ignorés)', best?.version === '0.2.0' && best.hasInstaller);
 }
 
 section('Limites prudentes');

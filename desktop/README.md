@@ -66,6 +66,35 @@ Pour tout essayer sans téléphone, utilise le téléphone simulé : un faux Ins
 npm run sim
 ```
 
+## Obtenir le .exe (installeur Windows)
+
+```bash
+cd desktop
+npm install
+npm run dist
+```
+
+Le fichier `dist/InstaGrowth-Desktop-Setup-<version>.exe` est l'installeur. Double-clique dessus : il installe l'app pour ton compte Windows (dans `%LOCALAPPDATA%\Programs`, sans droits administrateur) et crée les raccourcis Bureau et menu Démarrer. Le dossier `dist/win-unpacked/` contient aussi une version qui se lance sans installation (`InstaGrowth Desktop.exe`), mais elle ne peut pas se mettre à jour toute seule.
+
+L'exe n'est pas signé. Au premier lancement, Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » : clique sur **Informations complémentaires**, puis **Exécuter quand même**. Pour supprimer cet avertissement, il faudrait un certificat de signature de code.
+
+## Mises à jour
+
+L'app installée vérifie les nouvelles versions au démarrage, puis toutes les 6 heures. Tu peux aussi lancer la vérification à la main dans **Réglages → Version et mises à jour**. Quand une version plus récente existe, un bandeau bleu propose :
+
+1. **Mettre à jour** : télécharge l'installeur. Son empreinte SHA-512 est vérifiée avant toute installation.
+2. **Redémarrer et installer** : l'app se ferme, installe la nouvelle version et se relance. Tes réglages, clés et compteurs sont conservés.
+
+Rien ne se télécharge ni ne s'installe sans ton clic. « Plus tard » masque le bandeau jusqu'au prochain démarrage.
+
+Les versions de l'app desktop sont publiées dans les releases GitHub du dépôt sous le tag `desktop-vX.Y.Z`. Les releases `vX.Y.Z` sont celles de l'extension, et l'app les ignore. Pour publier une nouvelle version :
+
+1. Monte `"version"` dans `desktop/package.json` (par exemple `0.2.0`).
+2. Lance `npm run dist`.
+3. Lance `npm run release -- "Nouveautés de la version"`. Il faut le CLI `gh` connecté à GitHub. La commande crée la release `desktop-v0.2.0`, sans la marquer « Latest », avec l'installeur, son `.blockmap` et `latest.yml`.
+
+Les apps déjà installées proposeront la mise à jour à leur prochaine vérification.
+
 ## Mode Claude
 
 1. **Réglages → Intelligence artificielle** : colle ta clé `sk-ant-…` (à créer sur [platform.claude.com](https://platform.claude.com/settings/keys)), ou connecte **OpenRouter** (bouton de connexion, ou clé `sk-or-…`).
@@ -116,9 +145,11 @@ desktop/
     sim.js        téléphone simulé (faux Instagram)
     engine.js     orchestration, aperçu, arrêt immédiat
     store.js      réglages (clés chiffrées par Windows) et compteurs
-  src/main/      processus Electron (fenêtre, IPC, raccourci global)
+    version.js    choix de la release desktop la plus récente
+  src/main/      processus Electron (fenêtre, IPC, raccourci global, updater.js)
   src/renderer/  interface (HTML, CSS, JS, icônes SVG)
-  scripts/       test de bout en bout et faux serveur Claude
+  scripts/       test de bout en bout, faux serveur Claude, icône, publication
+  build/         icône de l'installeur
 ```
 
 Les données (réglages, compteurs, historique des likes) sont dans `%APPDATA%\InstaGrowth Desktop`, avec un bouton pour ouvrir ce dossier dans Réglages.

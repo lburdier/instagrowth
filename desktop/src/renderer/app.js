@@ -388,6 +388,47 @@ $('#toolsSave').addEventListener('click', async () => {
 });
 $('#openData').addEventListener('click', () => call('openDataFolder'));
 
+// --- Mises à jour ------------------------------------------------------------------------------
+
+let UP = null;
+let upHidden = '';
+function renderUpdate(u) {
+  UP = u;
+  const bar = $('#updateBar');
+  $('#verText').textContent = `Version ${u.current}${u.packaged ? '' : ' (mode développement : mise à jour par git pull)'}`;
+  $('#upMsg').textContent = u.status === 'checking' ? 'Recherche…' : u.status === 'uptodate' ? 'Tu as la dernière version.' : u.status === 'error' ? u.error : '';
+  const show = ['available', 'checking-feed', 'downloading', 'ready'].includes(u.status) || (u.status === 'error' && u.version);
+  bar.hidden = !show || (u.status === 'available' && upHidden === u.version);
+  if (bar.hidden) return;
+  $('#upTitle').textContent = u.status === 'ready' ? `InstaGrowth Desktop ${u.version} est prêt à être installé` : `InstaGrowth Desktop ${u.version} est disponible`;
+  $('#upSub').textContent = u.status === 'downloading' || u.status === 'checking-feed' ? `Téléchargement… ${u.percent || 0} %`
+    : u.status === 'ready' ? 'L’app va se fermer, installer la mise à jour puis se relancer. Tes réglages et compteurs sont conservés.'
+      : u.status === 'error' ? `Échec : ${u.error}` : `Tu utilises la version ${u.current}.`;
+  $('#upBar').hidden = !(u.status === 'downloading' || u.status === 'checking-feed');
+  $('#upBar span').style.width = `${u.percent || 0}%`;
+  const go = $('#upGo');
+  go.disabled = u.status === 'downloading' || u.status === 'checking-feed';
+  go.textContent = u.status === 'ready' ? 'Redémarrer et installer' : u.status === 'error' ? 'Réessayer' : u.packaged ? 'Mettre à jour' : 'Voir la release';
+  $('#upLater').hidden = u.status !== 'available';
+}
+$('#upGo').addEventListener('click', async () => {
+  if (!UP) return;
+  if (!UP.packaged && UP.status !== 'ready') return call('openExternal', UP.url);
+  if (UP.status === 'ready') {
+    if (S?.task && !window.confirm(`Une tâche est en cours (${S.task}). Elle sera arrêtée pour installer la mise à jour. Continuer ?`)) return;
+    if (S?.task) await call('stop');
+    return call('updateInstall');
+  }
+  quiet(call('updateDownload'));
+});
+$('#upNotes').addEventListener('click', () => UP?.url && call('openExternal', UP.url));
+$('#upLater').addEventListener('click', () => { upHidden = UP?.version || ''; $('#updateBar').hidden = true; });
+$('#upCheck').addEventListener('click', async () => {
+  upHidden = '';
+  const u = await quiet(call('updateCheck'));
+  if (u?.status === 'available') toast(`Version ${u.version} disponible : voir le bandeau en haut.`, 'ok');
+});
+
 // --- Journal ---------------------------------------------------------------------------------
 
 const LOG_ICON = { ok: 'check', warn: 'alert', error: 'alert', info: 'info' };
@@ -464,6 +505,7 @@ window.igg.on((e) => {
     case 'pending-dm': if (S) { S.pendingDm = e.dm; renderPending(); } break;
     case 'blocked': toast(`${e.reason}. Pause de sécurité activée.`, 'error'); break;
     case 'stopped': toast('Arrêt immédiat effectué.', 'warn'); break;
+    case 'update': renderUpdate(e.state); break;
     default: if (e.type.startsWith('agent-')) agentEvent(e);
   }
 });
@@ -474,4 +516,5 @@ let start = params.get('view');
 try { start ||= localStorage.getItem('igg-view'); } catch { /* rien */ }
 if (start && $(`.view[data-view="${start}"]`)) show(start);
 apply(await call('state'));
+renderUpdate(await call('updateState'));
 call('frame');

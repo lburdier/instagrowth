@@ -38,6 +38,20 @@
       <button class="btn small danger-soft" data-action="stop"><i data-i="stop" data-s="14"></i>Arrêter</button>
     </div>
 
+    <div class="update" id="updateBar" hidden>
+      <i data-i="download" data-s="22"></i>
+      <div class="grow">
+        <strong id="upTitle"></strong>
+        <small class="muted" id="upSub"></small>
+        <div class="bar" id="upBar" hidden><span></span></div>
+      </div>
+      <div class="row nowrap">
+        <button class="btn small" id="upNotes">Nouveautés</button>
+        <button class="btn small" id="upLater">Plus tard</button>
+        <button class="btn small primary" id="upGo"></button>
+      </div>
+    </div>
+
     <div class="pending" id="pendingDm" hidden>
       <i data-i="message" data-s="22"></i>
       <div class="grow">
@@ -291,6 +305,9 @@
           <label class="field">Chemin de adb.exe (vide = détection automatique) <input id="adbPath" placeholder="C:\platform-tools\adb.exe"></label>
           <label class="field">Chemin de scrcpy.exe (facultatif, miroir en direct) <input id="scrcpyPath" placeholder="C:\scrcpy\scrcpy.exe"></label>
           <div class="row"><span class="spacer"></span><button class="btn primary" id="toolsSave"><i data-i="check" data-s="16"></i>Enregistrer</button></div>
+          <h3 class="mt">Version et mises à jour</h3>
+          <p class="muted" id="verText">Version —</p>
+          <div class="row"><button class="btn" id="upCheck"><i data-i="refresh" data-s="16"></i>Rechercher une mise à jour</button><small class="muted" id="upMsg"></small></div>
           <h3 class="mt">Données</h3>
           <p class="muted">Réglages, compteurs de limites et historique des likes sont stockés localement.</p>
           <button class="btn" id="openData"><i data-i="folder" data-s="16"></i>Ouvrir le dossier des données</button>
