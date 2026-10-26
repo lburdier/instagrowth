@@ -23,10 +23,10 @@ function lastTree(body) {
 const SCRIPT = [
   () => ['open_hashtag', { tag: 'yoga' }, 'Je commence par ouvrir la page du hashtag #yoga.'],
   (t) => ['tap_element', { element: findLine(t, /id=image_button/) }, 'J’ouvre la première publication de la grille.'],
-  (t) => ['tap_element', { element: findLine(t, /id=row_feed_button_like/) }, 'Je touche le cœur directement.'],
-  (t) => ['like_post', { element: findLine(t, /id=row_feed_button_like/) }, 'Le tap direct est refusé : je passe par like_post.'],
+  (t) => ['tap_element', { element: findLine(t, /id=(like_button|row_feed_button_like)/) }, 'Je touche le cœur directement.'],
+  (t) => ['like_post', { element: findLine(t, /id=(like_button|row_feed_button_like)/) }, 'Le tap direct est refusé : je passe par like_post.'],
   () => ['swipe', { direction: 'up' }, 'Publication suivante.'],
-  (t) => ['like_post', { element: findLine(t, /desc="J’aime" id=row_feed_button_like/) }, 'Je like cette publication aussi.'],
+  (t) => ['like_post', { element: findLine(t, /desc="J’aime" id=(like_button|row_feed_button_like)(?!.*sel)/) }, 'Je like cette publication aussi.'],
   () => ['prepare_dm', { username: 'atelier.noa', message: 'Bonjour, vos pièces bleu nuit sont superbes.' }, 'Je prépare le message demandé.'],
   (t) => ['tap_element', { element: findLine(t, /id=row_thread_composer_send_button_container/) }, 'J’essaie d’envoyer.'],
   () => ['finish', { summary: '2 likes vérifiés sur #yoga et un message préparé pour @atelier.noa (à confirmer dans l’app).' }, 'Mission terminée.'],

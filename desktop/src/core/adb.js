@@ -1,12 +1,13 @@
 // Couche ADB : trouve adb.exe, liste les téléphones, et pilote un appareil
 // (capture d'écran, arbre UI, tap, glissement, saisie, liens).
 
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { IG_PACKAGE } from './selectors.js';
 import { sleep, StoppedError } from './control.js';
+import { ScreenStream } from './stream.js';
 
 const WIN = process.platform === 'win32';
 const EXE = WIN ? 'adb.exe' : 'adb';
@@ -32,6 +33,14 @@ function onPath(exe) {
     if (dir && fs.existsSync(p)) return p;
   }
   return null;
+}
+
+/** L'écran n'a pas pu être lu (animation continue : uiautomator n'obtient jamais l'état « au repos »). */
+export class UnreadableScreenError extends Error {
+  constructor(msg = 'Écran illisible pour l’instant (animation en cours).') {
+    super(msg);
+    this.name = 'UnreadableScreenError';
+  }
 }
 
 /** Cherche adb : réglage manuel, PATH, puis emplacements habituels sous Windows. */
@@ -95,6 +104,67 @@ export class AdbClient {
   device(serial) {
     return new AdbDevice(this, serial);
   }
+
+  /**
+   * Suivi instantané des branchements (`adb track-devices`) : `onChange` est appelé
+   * dès qu'un téléphone apparaît, disparaît ou change d'état. Relance automatique.
+   * @returns {() => void} arrêt du suivi
+   */
+  trackDevices(onChange) {
+    let proc = null;
+    let stopped = false;
+    let timer = null;
+    const startIt = () => {
+      if (stopped) return;
+      let buf = '';
+      proc = spawn(this.path, ['track-devices'], { windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
+      proc.stdout.on('data', (d) => {
+        buf += d.toString('utf8');
+        // Messages : 4 chiffres hexadécimaux (longueur) puis la liste « série, tabulation, état » par ligne.
+        while (buf.length >= 4) {
+          const len = parseInt(buf.slice(0, 4), 16);
+          if (Number.isNaN(len) || buf.length < 4 + len) break;
+          buf = buf.slice(4 + len);
+          onChange();
+        }
+      });
+      proc.on('error', () => {});
+      proc.on('close', () => {
+        proc = null;
+        if (!stopped) timer = setTimeout(startIt, 1500);
+      });
+    };
+    startIt();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+      proc?.kill();
+    };
+  }
+
+  /** Relance la connexion des téléphones « hors ligne » (câble qui a sauté, veille USB). */
+  reconnectOffline() {
+    return run(this.path, ['reconnect', 'offline'], { timeout: 8000 }).catch(() => '');
+  }
+
+  /**
+   * Nouvelle poignée de main USB avec un téléphone. Utile quand l'autorisation a été
+   * acceptée sur le téléphone mais que l'état reste « non autorisé » côté PC.
+   */
+  reconnectDevice(serial) {
+    return run(this.path, ['-s', serial, 'reconnect'], { timeout: 8000 }).catch(() => '');
+  }
+
+  /** Connexion Wi-Fi (débogage via le réseau local) : « 192.168.1.20:5555 ». */
+  async connect(host) {
+    const out = await run(this.path, ['connect', host], { timeout: 12000 });
+    if (!/connected to|already connected/i.test(out)) throw new Error(out.trim() || `Connexion à ${host} impossible.`);
+    return out.trim();
+  }
+
+  disconnect(host) {
+    return run(this.path, ['disconnect', host], { timeout: 8000 }).catch(() => '');
+  }
 }
 
 // Caractères que `input text` sait taper (ASCII imprimable).
@@ -133,6 +203,48 @@ export class AdbDevice {
 
   shell(cmd, opts) {
     return this._adb(['shell', cmd], opts);
+  }
+
+  /**
+   * Commande « fire and forget » par un `adb shell` resté ouvert : pas de nouveau
+   * processus à chaque geste, donc un contrôle manuel bien plus réactif.
+   */
+  fast(cmd) {
+    if (!this._fast || this._fast.exitCode !== null || this._fast.killed) {
+      const p = spawn(this.client.path, ['-s', this.serial, 'shell'], { windowsHide: true, stdio: ['pipe', 'ignore', 'ignore'] });
+      p.on('error', () => {});
+      p.stdin.on('error', () => {});
+      this._fast = p;
+    }
+    try {
+      this._fast.stdin.write(`${cmd}\n`);
+    } catch {
+      this._fast = null;
+      return this.shell(cmd).catch(() => '');
+    }
+    return Promise.resolve('');
+  }
+
+  closeFast() {
+    try { this._fast?.stdin.end('exit\n'); } catch { /* déjà fermé */ }
+    this._fast?.kill();
+    this._fast = null;
+  }
+
+  /** Flux vidéo de l'écran (H.264), voir stream.js. */
+  async screenStream(opts) {
+    return new ScreenStream(this.client.path, this.serial, await this.screenSize(), opts);
+  }
+
+  /** Adresse IP Wi-Fi du téléphone (wlan0), ou '' s'il n'est pas sur un réseau. */
+  async wifiIp() {
+    const out = await this.shell('ip -f inet addr show wlan0').catch(() => '');
+    return (/inet (\d+\.\d+\.\d+\.\d+)/.exec(out) || [])[1] || '';
+  }
+
+  /** Passe le débogage en mode réseau (port 5555), à faire pendant que le câble est branché. */
+  tcpip(port = 5555) {
+    return this._adb(['tcpip', String(port)], { timeout: 12000 });
   }
 
   async getProp(name) {
@@ -177,22 +289,26 @@ export class AdbDevice {
     return this._serial(() => this._adb(['exec-out', 'screencap', '-p'], { signal, binary: true, timeout: 15000 }));
   }
 
-  /** Arbre UI (XML). Réessaie : uiautomator échoue parfois quand une vidéo tourne à l'écran. */
+  /**
+   * Arbre UI (XML). Le fichier est effacé avant chaque lecture : un dump raté ne doit
+   * jamais renvoyer l'écran précédent. Si l'écran ne se stabilise pas (animation
+   * continue), UnreadableScreenError : à l'appelant de passer à autre chose.
+   */
   dumpUi({ signal } = {}) {
     return this._serial(async () => {
-      let last;
-      for (let i = 0; i < 3; i++) {
-        try {
-          const out = await this._adb(['exec-out', 'uiautomator dump /sdcard/igg_ui.xml >/dev/null 2>&1; cat /sdcard/igg_ui.xml'], { signal, timeout: 20000 });
-          if (out.includes('<hierarchy')) return out.slice(out.indexOf('<?xml') >= 0 ? out.indexOf('<?xml') : out.indexOf('<hierarchy'));
-          last = new Error('Arbre UI vide (écran verrouillé ou animation en cours).');
-        } catch (e) {
-          if (e instanceof StoppedError) throw e;
-          last = e;
-        }
-        await sleep(700, signal);
+      let last = '';
+      for (let i = 0; i < 2; i++) {
+        const out = await this._adb(['exec-out', 'rm -f /sdcard/igg_ui.xml; uiautomator dump /sdcard/igg_ui.xml 2>&1; echo @@IGG@@; cat /sdcard/igg_ui.xml 2>/dev/null'], { signal, timeout: 25000 });
+        const [msg, xml = ''] = out.split('@@IGG@@');
+        if (xml.includes('<hierarchy')) return xml.slice(xml.indexOf('<?xml') >= 0 ? xml.indexOf('<?xml') : xml.indexOf('<hierarchy'));
+        last = msg.trim();
+        // Animation continue (« idle state ») : une 2e tentative échoue pareil après ~12 s, on rend la main.
+        // Écran verrouillé ou autre problème : inutile d'insister non plus.
+        if (!/null root/i.test(last)) break;
+        await sleep(500, signal);
       }
-      throw new Error(`Lecture de l’écran impossible : ${last?.message || 'erreur inconnue'}`);
+      if (/idle/i.test(last)) throw new UnreadableScreenError();
+      throw new Error(`Lecture de l’écran impossible : ${last || 'arbre UI vide (écran éteint ou verrouillé ?)'}`);
     });
   }
 

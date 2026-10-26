@@ -19,7 +19,8 @@ const flag = (name) => argv.find((a) => a === `--${name}` || a.startsWith(`--${n
 const flagValue = (name) => (flag(name) || '').split('=')[1] || '';
 
 app.setAppUserModelId('fr.instagrowth.desktop');
-if (!app.requestSingleInstanceLock()) app.quit();
+// Une seule fenêtre à la fois (sauf le mode capture, qui a son propre dossier de données).
+if (!flag('shot') && !app.requestSingleInstanceLock()) app.quit();
 
 let win = null;
 let engine = null;
@@ -151,6 +152,10 @@ const API = {
   setLive: (on) => engine.setLive(on),
   frame: () => engine.captureFrame(),
   manual: (action, a) => engine.manual(action, a),
+  restartStream: () => engine.restartStream(),
+  enableWifi: () => engine.enableWifi(),
+  connectWifi: (host) => engine.connectWifi(host),
+  forgetWifi: () => engine.forgetWifi(),
   openScrcpy: () => engine.openScrcpy(),
   stop: () => engine.stop(),
   readProfile: (u) => engine.readProfile(u),
@@ -211,13 +216,16 @@ app.whenReady().then(async () => {
   if (flag('sim')) store.saveSettings({ sim: { enabled: true } });
   engine = new Engine({ store, rasterize, resize });
   engine.on('event', send);
+  // Avant la fenêtre : l'interface lit l'état des mises à jour dès son chargement.
+  updater = new Updater({ app, send, log: (l, m) => engine.log(l, m) });
 
   createWindow();
   await engine.refresh().catch((e) => console.error(e));
-  engine.setLive(true);
-  setInterval(() => engine.pollDevices().catch(() => {}), 4000);
+  engine.setLive(!flag('shot') || !!flag('sim') || !!flag('live'));
+  // Branchements détectés à l'instant (adb track-devices) ; vérification lente en secours.
+  engine.watchDevices();
+  setInterval(() => { engine.watchDevices(); engine.pollDevices().catch(() => {}); }, 8000);
 
-  updater = new Updater({ app, send, log: (l, m) => engine.log(l, m) });
   if (!flag('shot')) updater.start();
 
   globalShortcut.register('CommandOrControl+Alt+X', () => {
@@ -267,5 +275,10 @@ app.whenReady().then(async () => {
 app.on('second-instance', () => {
   if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
 });
-app.on('will-quit', () => globalShortcut.unregisterAll());
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
+  engine?.setLive(false);
+  engine?.unwatch?.();
+  engine?.device?.closeFast?.();
+});
 app.on('window-all-closed', () => app.quit());

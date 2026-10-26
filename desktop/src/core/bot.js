@@ -4,6 +4,7 @@
 import { parseUiXml, findAll, findOne, center, label, fullyVisible, nearest, area } from './uitree.js';
 import { SEL, LIKE_ON, LIKE_OFF, BLOCK_PATTERNS, LINKS, IG_PACKAGE, cleanUsername, cleanTag } from './selectors.js';
 import { sleep, humanPause, jitterPoint, rand, StoppedError } from './control.js';
+import { heartIsRed } from './png.js';
 
 /** « 12,8 k », « 1,2 M », « 3 456 », « 12.8K » → nombre */
 export function parseCount(s) {
@@ -71,11 +72,30 @@ export class Bot {
 
   // --- Lecture de l'écran ---------------------------------------------------
 
+  /** Écran courant. `unreadable` : arbre illisible (animation), aucun nœud ; on ne touche à rien. */
   async screen() {
-    const xml = await this.device.dumpUi({ signal: this.signal });
-    const nodes = parseUiXml(xml);
     const size = await this.device.screenSize();
+    let xml;
+    try {
+      xml = await this.device.dumpUi({ signal: this.signal });
+    } catch (e) {
+      if (e.name === 'UnreadableScreenError') return { nodes: [], size, block: null, unreadable: true };
+      throw e;
+    }
+    const nodes = parseUiXml(xml);
     return { nodes, size, block: this.detectBlock(nodes) };
+  }
+
+  /** Secours quand l'arbre est illisible : couleur du cœur sur une capture d'écran. */
+  async heartFromPixels(btn) {
+    try {
+      const png = await this.device.screencap({ signal: this.signal });
+      const { width } = await this.device.screenSize();
+      return heartIsRed(png, btn.bounds, width);
+    } catch (e) {
+      if (e instanceof StoppedError) throw e;
+      return null;
+    }
   }
 
   detectBlock(nodes) {
@@ -177,9 +197,19 @@ export class Bot {
     if (!item) throw new Error('Aucune publication dans la grille (compte privé ou sans publication ?).');
     await this.pause(800, 2000);
     await this.tapNode(item);
-    const post = await this.waitFor(({ nodes }) => findAll(nodes, SEL.likeButton).length > 0);
-    if (!post) throw new Error('La publication ne s’est pas ouverte.');
-    return post;
+    // Une publication peut s'ouvrir sans être lisible (animation continue) : on passe à la suivante.
+    for (let i = 0, skipped = 0; i < 12 && skipped < 6; i++) {
+      const s2 = await this.screen();
+      if (s2.block || findAll(s2.nodes, SEL.likeButton).length) return s2;
+      if (s2.unreadable) {
+        skipped++;
+        this.log('info', 'Publication illisible pour l’instant (animation) : on passe à la suivante.');
+        await this.scrollFeed(s2);
+        continue;
+      }
+      await this.wait(900);
+    }
+    throw new Error('La publication ne s’est pas ouverte.');
   }
 
   // --- Likes vérifiés -------------------------------------------------------
@@ -192,12 +222,29 @@ export class Bot {
 
   /** Auteur et légende de la publication à laquelle appartient un bouton J'aime. */
   postMeta(s, btn) {
+    const clips = this.clipsMeta(s, btn);
+    if (clips) return clips;
     const authors = findAll(s.nodes, SEL.postAuthor).filter((n) => n.bounds[3] <= btn.bounds[1]);
     const author = authors.sort((a, b) => b.bounds[1] - a.bounds[1])[0];
     const caption = findAll(s.nodes, SEL.postCaption).filter((n) => n.bounds[1] >= btn.bounds[3]).sort((a, b) => a.bounds[1] - b.bounds[1])[0];
     const captionText = caption ? label(caption) : '';
     const user = author ? label(author) : (captionText.split(/\s/)[0] || '');
     return { author: user.replace(/^@/, ''), caption: captionText.slice(0, 140), key: `${user}|${captionText.slice(0, 60)}` };
+  }
+
+  /** Vue « clips » (plein écran) : auteur et légende sont sous les boutons, pas au-dessus. */
+  clipsMeta(s, btn) {
+    const authors = findAll(s.nodes, SEL.clipsAuthor);
+    if (!authors.length) return null;
+    // Pendant une transition, deux publications peuvent être visibles : on prend celle du bouton.
+    const near = (n) => Math.abs(n.bounds[1] - btn.bounds[1]);
+    const author = authors.sort((a, b) => near(a) - near(b))[0];
+    const box = findAll(s.nodes, SEL.clipsCaption).sort((a, b) => near(a) - near(b))[0];
+    const inBox = (n) => box && n.bounds[0] >= box.bounds[0] && n.bounds[1] >= box.bounds[1] && n.bounds[2] <= box.bounds[2] && n.bounds[3] <= box.bounds[3];
+    const captionText = (box && label(box)) || label(s.nodes.find((n) => n !== box && inBox(n) && label(n)) || {}) || '';
+    const media = findAll(s.nodes, SEL.clipsMedia).sort((a, b) => near(a) - near(b))[0];
+    const user = label(author).replace(/^@/, '');
+    return { author: user, caption: captionText.slice(0, 140), key: `${user}|${captionText.slice(0, 60)}|${media ? label(media).slice(0, 40) : ''}` };
   }
 
   /**
@@ -214,14 +261,19 @@ export class Bot {
 
     const pos = center(btn);
     await this.tapNode(btn);
-    // Vérification : on relit l'écran et on retrouve le même bouton.
+    // Vérification : on relit l'écran et on retrouve le même bouton. Si l'arbre est
+    // illisible (animation), on regarde la couleur du cœur sur une capture.
     let after = null;
-    for (let i = 0; i < 2 && after !== true; i++) {
+    for (let i = 0; i < 3 && after !== true; i++) {
       await this.wait(i === 0 ? rand(1100, 1600) : 1600);
       const s2 = await this.screen();
       if (s2.block) {
         await this.handleBlock(s2.block);
         return { ok: false, blocked: true, reason: 'Instagram a bloqué l’action.', ...meta };
+      }
+      if (s2.unreadable) {
+        after = await this.heartFromPixels(btn);
+        continue;
       }
       const again = nearest(findAll(s2.nodes, SEL.likeButton), pos);
       after = again && again.distance < 220 ? likeState(again.node) : null;
@@ -265,7 +317,7 @@ export class Bot {
   async likeSession({ targets, count }) {
     const guard = this.ctx.guard;
     const goal = Math.max(1, Math.min(Number(count) || 1, 200));
-    const result = { liked: 0, failed: 0, skipped: 0, stoppedBy: '' };
+    const result = { liked: 0, failed: 0, skipped: 0, already: 0, unreadable: 0, stoppedBy: '' };
     const seen = new Set();
     let delay = guard.nextDelayMs();
     this.log('info', `Session de likes : objectif ${goal}, cibles ${targets.join(', ')}.`);
@@ -289,7 +341,19 @@ export class Bot {
       }
 
       let idle = 0;
-      while (result.liked < goal && idle < 4) {
+      let alreadyRow = 0;
+      let unreadableRow = 0;
+      while (result.liked < goal && idle < 4 && alreadyRow < 25 && unreadableRow < 8) {
+        if (s.unreadable) {
+          // Écran illisible (animation continue) : on ne touche à rien et on passe à la suivante.
+          result.unreadable++;
+          unreadableRow++;
+          this.log('info', 'Publication illisible pour l’instant (animation) : on passe à la suivante.');
+          await this.scrollFeed(s);
+          s = await this.screen();
+          continue;
+        }
+        unreadableRow = 0;
         const btn = this.likeButtons(s).find((b) => !seen.has(this.postMeta(s, b).key));
         if (!btn) {
           idle++;
@@ -301,13 +365,16 @@ export class Bot {
         idle = 0;
         const meta = this.postMeta(s, btn);
         seen.add(meta.key);
-        // Comme un humain : on regarde la publication, et parfois on passe sans liker.
-        await this.pause(2000, 6000);
-        if (Math.random() < 0.15) {
+        if (likeState(btn) === true) {
+          // Déjà likée (cœur rouge) : on ne la touche surtout pas, sinon on retirerait le like.
+          result.already++;
+          alreadyRow++;
+          this.log('info', `Publication de @${meta.author || '?'} déjà likée : on passe.`);
+          await this.pause(700, 1800);
+        } else if ((await this.pause(2000, 6000), Math.random() < 0.15)) {
+          // Comme un humain : on regarde la publication, et parfois on passe sans liker.
           result.skipped++;
           this.log('info', `Publication de @${meta.author || '?'} regardée sans like (rythme naturel).`);
-        } else if (likeState(btn) === true) {
-          result.skipped++;
         } else {
           await this.waitLikeDelay(delay.ms);
           s = await this.screen(); // l'écran a pu bouger pendant l'attente
@@ -315,6 +382,7 @@ export class Bot {
           if (!fresh || fresh.distance > 220) continue;
           const r = await this.likeButton(s, fresh.node, { source });
           if (r.ok) {
+            alreadyRow = 0;
             result.liked++;
             this.ctx.event({ type: 'progress', liked: result.liked, goal });
             delay = guard.nextDelayMs();
@@ -322,7 +390,7 @@ export class Bot {
           } else if (r.limit || r.blocked || r.paused) {
             result.stoppedBy = r.reason || 'Pause de sécurité.';
             return result;
-          } else if (r.skipped) result.skipped++;
+          } else if (r.skipped) result.already++;
           else result.failed++;
         }
         await this.scrollFeed(s);
@@ -330,9 +398,11 @@ export class Bot {
         if (s.block) { await this.handleBlock(s.block); result.stoppedBy = 'Action bloquée par Instagram.'; return result; }
       }
       if (idle >= 4) this.log('info', `${source} : plus de nouvelles publications, cible suivante.`);
+      if (alreadyRow >= 25) this.log('info', `${source} : 25 publications d’affilée déjà likées, cible suivante.`);
+      if (unreadableRow >= 8) this.log('warn', `${source} : 8 publications d’affilée illisibles, cible suivante.`);
     }
     if (!result.stoppedBy && result.liked < goal) result.stoppedBy = 'Toutes les cibles ont été parcourues. Ajoute de nouveaux hashtags ou comptes.';
-    this.log('ok', `Session terminée : ${result.liked} like(s) vérifié(s), ${result.failed} non confirmé(s), ${result.skipped} passé(s).${result.stoppedBy ? ` ${result.stoppedBy}` : ''}`);
+    this.log('ok', `Session terminée : ${result.liked} like(s) vérifié(s), ${result.failed} non confirmé(s), ${result.already} déjà likée(s), ${result.skipped} passée(s)${result.unreadable ? `, ${result.unreadable} illisible(s)` : ''}.${result.stoppedBy ? ` ${result.stoppedBy}` : ''}`);
     return result;
   }
 

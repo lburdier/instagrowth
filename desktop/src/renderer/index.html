@@ -97,6 +97,17 @@
           <div id="infoBox"></div>
         </div>
         <div class="card">
+          <h2 class="h-ico"><i data-i="wifi" data-s="18"></i>Connexion sans fil</h2>
+          <p class="muted">Garde le téléphone connecté sans câble. Il faut l’avoir branché une première fois en USB, et le PC doit être sur le même réseau Wi-Fi. À refaire après un redémarrage du téléphone.</p>
+          <p id="wifiState" class="muted"></p>
+          <div class="row">
+            <button class="btn primary" id="wifiOn"><i data-i="wifi" data-s="16"></i>Passer en Wi-Fi</button>
+            <input id="wifiHost" placeholder="192.168.1.20:5555" style="flex:1;min-width:160px">
+            <button class="btn" id="wifiConnect">Connecter</button>
+            <button class="btn" id="wifiForget" hidden>Oublier</button>
+          </div>
+        </div>
+        <div class="card">
           <h2 class="h-ico"><i data-i="monitor" data-s="18"></i>Simulation</h2>
           <p class="muted">Un faux Instagram dans un téléphone virtuel. Rien n’est envoyé à Instagram, et les compteurs sont séparés de ceux du vrai compte.</p>
           <label class="switch-row"><span>Utiliser le téléphone simulé</span><input type="checkbox" id="simToggle" class="switch"></label>
@@ -320,18 +331,21 @@
     <div class="phone-head">
       <strong id="phoneTitle">Écran du téléphone</strong>
       <span class="spacer"></span>
-      <label class="mini-toggle" title="Rafraîchir l’aperçu en continu"><input type="checkbox" id="liveToggle" checked><i data-i="eye" data-s="16"></i></label>
-      <label class="mini-toggle" title="Contrôle manuel : un clic sur l’écran = un tap sur le téléphone"><input type="checkbox" id="manualToggle"><i data-i="hand" data-s="16"></i></label>
+      <label class="mini-toggle" title="Écran en direct"><input type="checkbox" id="liveToggle" checked><i data-i="eye" data-s="16"></i></label>
+      <label class="mini-toggle" title="Contrôle tactile : touche et fais glisser sur l’écran pour piloter le téléphone"><input type="checkbox" id="manualToggle" checked><i data-i="hand" data-s="16"></i></label>
     </div>
     <div class="phone">
-      <div class="phone-screen" id="screen">
+      <div class="phone-screen" id="screen" tabindex="0">
         <img id="screenImg" alt="" draggable="false">
+        <canvas id="screenCanvas" width="540" height="1170"></canvas>
+        <span class="live-badge" id="liveBadge" hidden>EN DIRECT</span>
         <div class="screen-empty" id="screenEmpty"><i data-i="usb" data-s="40"></i><strong>Aucun appareil</strong><span>Branche ton téléphone en USB avec le débogage activé, ou active la simulation.</span></div>
       </div>
     </div>
     <div class="phone-controls">
       <button class="icon-btn" data-manual="back" title="Retour"><i data-i="back" data-s="18"></i></button>
       <button class="icon-btn" data-manual="home" title="Accueil"><i data-i="home" data-s="18"></i></button>
+      <button class="icon-btn" data-manual="recents" title="Applications récentes"><i data-i="layers" data-s="18"></i></button>
       <button class="icon-btn" data-manual="launch" title="Ouvrir Instagram"><i data-i="play" data-s="16"></i></button>
       <button class="icon-btn" data-manual="wake" title="Allumer l’écran"><i data-i="power" data-s="18"></i></button>
       <button class="icon-btn" id="scrcpyBtn" title="Miroir en direct (scrcpy)"><i data-i="external" data-s="18"></i></button>

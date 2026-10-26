@@ -17,6 +17,7 @@ import { AdbClient, findAdb, toAscii } from '../src/core/adb.js';
 import { parseCount } from '../src/core/bot.js';
 import { startMock } from './mock-claude.mjs';
 import { newer, pickDesktopRelease } from '../src/core/version.js';
+import { NalSplitter, codecFromSps } from '../src/core/stream.js';
 
 let pass = 0;
 let fail = 0;
@@ -66,6 +67,44 @@ section('Mises à jour');
   check('release desktop choisie (extension, brouillons et préversions ignorés)', best?.version === '0.2.0' && best.hasInstaller);
 }
 
+section('Écran en direct et contrôle tactile');
+{
+  // Flux H.264 : SPS, PPS, image clé, image delta, découpés même si les paquets arrivent en morceaux.
+  const sc = (n) => Buffer.from(n === 4 ? [0, 0, 0, 1] : [0, 0, 1]);
+  const sps = Buffer.concat([sc(4), Buffer.from([0x67, 0x42, 0xc0, 0x1f, 0xaa, 0xbb])]);
+  const pps = Buffer.concat([sc(4), Buffer.from([0x68, 0xce, 0x3c, 0x80])]);
+  const idr = Buffer.concat([sc(4), Buffer.from([0x65, 0x88, 0x84, 0x00, 0x00, 0x03, 0x01, 0x22])]);
+  const p1 = Buffer.concat([sc(3), Buffer.from([0x41, 0x9a, 0x02, 0x03])]);
+  const all = Buffer.concat([sps, pps, idr, p1]);
+  const nals = [];
+  const sp = new NalSplitter((n) => nals.push(Buffer.from(n)));
+  for (let i = 0; i < all.length; i += 5) sp.push(all.subarray(i, i + 5));
+  sp.flush();
+  check('NAL découpés (SPS, PPS, clé, delta)', nals.length === 4 && nals.map((n) => n[n[2] === 1 ? 3 : 4] & 0x1f).join() === '7,8,5,1', nals.map((n) => n.toString('hex')).join(' '));
+  check('codec WebCodecs lu dans le SPS', codecFromSps(sps) === 'avc1.42c01f');
+
+  const { engine } = newEngine();
+  await engine.refresh();
+  const d = engine.device;
+  await engine.openHashtag('blender3d');
+  await engine.manual('tap', { x: 0.25, y: 0.35 }); // première vignette de la grille
+  check('tap sur l’écran de l’app = tap sur le téléphone', d.screen.type === 'clips');
+  const before = d.screen.index;
+  await engine.manual('swipe', { x1: 0.5, y1: 0.75, x2: 0.5, y2: 0.25, ms: 200 });
+  check('glisser = publication suivante', d.screen.index === before + 1);
+  await engine.manual('back');
+  check('clic droit = retour', d.screen.type === 'grid');
+  let refused = '';
+  try { await engine.manual('key', { code: 26 }); } catch (e) { refused = e.message; }
+  check('touche non prévue refusée (ex. bouton marche)', /non autorisée/.test(refused));
+  const run = engine.likeSession({ targets: ['#cafe'], count: 1 });
+  let blocked = '';
+  try { await engine.manual('tap', { x: 0.5, y: 0.5 }); } catch (e) { blocked = e.message; }
+  engine.stop();
+  await run;
+  check('pas de geste manuel pendant une tâche', /tâche est en cours/.test(blocked));
+}
+
 section('Limites prudentes');
 {
   const st = memState();
@@ -99,6 +138,42 @@ section('Bot : likes vérifiés');
   check('compteur = likes réellement présents dans l’app', engine.guard.status().today === engine.device.likesRegistered && engine.device.likesRegistered === 4);
   check('aucun like retiré (cœur déjà rouge jamais touché)', [...engine.device.postsById.values()].filter((x) => x.liked).length === 4);
   check('chaque like annoncé « vérifié »', logs.filter((l) => /Like vérifié/.test(l.msg)).length === 4);
+}
+
+section('Bot : vue plein écran (« clips ») et publications déjà likées');
+{
+  const { engine, logs } = newEngine();
+  await engine.refresh();
+  const posts = engine.device.tagPosts('blender3d');
+  // Les 5 premières publications sont déjà likées (cœur rouge) avant la session.
+  posts.slice(0, 5).forEach((x) => { x.liked = true; });
+  const r = await engine.likeSession({ targets: ['#blender3d'], count: 3 });
+  check('3 likes vérifiés dans la vue clips', r.liked === 3, JSON.stringify(r));
+  check('publications déjà likées détectées et passées', r.already >= 3 && logs.some((l) => /déjà likée : on passe/.test(l.msg)), JSON.stringify(r));
+  check('aucun cœur rouge retiré', posts.slice(0, 5).every((x) => x.liked));
+  check('auteur lu dans la vue clips', logs.some((l) => /Like vérifié sur la publication de @[a-z]/.test(l.msg)));
+}
+
+section('Bot : publications illisibles (animation continue)');
+{
+  const { engine, logs } = newEngine();
+  await engine.refresh();
+  const posts = engine.device.tagPosts('anim');
+  // Les 4 premières publications ne se laissent pas lire, comme « mykol3d » sur le vrai téléphone.
+  posts.slice(0, 4).forEach((x) => { x.animated = true; });
+  const r = await engine.likeSession({ targets: ['#anim'], count: 2 });
+  check('publications illisibles passées, likes faits ensuite', r.liked === 2 && r.unreadable + (logs.filter((l) => /illisible/.test(l.msg)).length ? 1 : 0) > 0, JSON.stringify(r));
+  check('aucune publication illisible touchée', posts.slice(0, 4).every((x) => !x.liked));
+  const { heartIsRed } = await import('../src/core/png.js');
+  const d = engine.device;
+  await engine.openHashtag('anim');
+  posts[10].liked = true;
+  posts[11].liked = false;
+  d.push({ type: 'clips', tag: 'anim', posts, index: 10 });
+  const btn = [933, 888, 1057, 1012];
+  check('cœur lu sur la capture (secours) : liké = rouge', heartIsRed(await d.screencap(), btn, 1080) === true);
+  d.screen.index = 11;
+  check('cœur lu sur la capture (secours) : pas liké = blanc', heartIsRed(await d.screencap(), btn, 1080) === false);
 }
 
 section('Bot : likes qui ne « prennent » pas');

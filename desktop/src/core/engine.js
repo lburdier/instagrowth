@@ -31,6 +31,8 @@ export class Engine extends EventEmitter {
     this.adbError = '';
     this.live = false;
     this.lastFrame = null;
+    this.stream = null;
+    this.streamFailed = '';
     this.guards = {
       usb: new LimitGuard(() => this.store.settings.limits, store.openState('state')),
       sim: new LimitGuard(() => this.store.settings.limits, store.openState('state-sim')),
@@ -90,6 +92,9 @@ export class Engine extends EventEmitter {
       if (!pick) this.device = null;
       else if (this.device?.serial !== pick.serial || this.device.kind !== 'usb') this.device = this.adb.device(pick.serial);
     }
+    if (this._lastDevice && this._lastDevice !== this.device) this._lastDevice.closeFast?.();
+    const changed = this._lastDevice !== this.device;
+    this._lastDevice = this.device;
     this.info = null;
     if (this.device) {
       try {
@@ -99,24 +104,109 @@ export class Engine extends EventEmitter {
       }
     }
     this.emitState();
-    this.requestFrame();
+    if (changed && this.live) this.setLive(true);
+    else this.requestFrame();
     return this.snapshot();
   }
 
-  /** Surveillance légère : relance refresh() seulement si la liste des téléphones a changé. */
+  /** Suivi instantané des branchements (adb track-devices), en plus d'une vérification lente. */
+  watchDevices() {
+    if (!this.adb || this._watched === this.adb.path) return;
+    this.unwatch?.();
+    this._watched = this.adb.path;
+    this.unwatch = this.adb.trackDevices(() => {
+      clearTimeout(this._trackT);
+      this._trackT = setTimeout(() => this.pollDevices().catch(() => {}), 200);
+    });
+  }
+
+  /** Relance refresh() seulement si la liste des téléphones a changé. */
   async pollDevices() {
-    if (this.task || !this.adb) return this.adb ? null : this.refresh();
+    if (!this.adb) return this.refresh();
     let list;
     try { list = await this.adb.devices(); } catch { return null; }
-    const sig = (l) => l.map((d) => `${d.serial}:${d.state}`).sort().join('|');
-    if (sig(list) !== sig(this.devices)) {
-      const before = this.devices.filter((d) => d.state === 'device').length;
-      await this.refresh();
-      const after = this.devices.filter((d) => d.state === 'device').length;
-      if (after > before) this.log('ok', 'Téléphone connecté.');
-      if (after < before) this.log('warn', 'Téléphone déconnecté.');
+    const now = Date.now();
+    // Câble qui a sauté, veille USB : un téléphone « hors ligne » se répare souvent tout seul.
+    if (list.some((d) => d.state === 'offline') && now - (this._reconnectAt || 0) > 10000) {
+      this._reconnectAt = now;
+      this.adb.reconnectOffline();
     }
+    // Autorisation acceptée sur le téléphone mais restée « non autorisé » côté PC :
+    // une nouvelle poignée de main suffit (vu sur un Samsung A16).
+    this._unauthSince ||= {};
+    for (const d of list) {
+      if (d.state !== 'unauthorized') { delete this._unauthSince[d.serial]; continue; }
+      const since = (this._unauthSince[d.serial] ||= { at: now, retry: 0 });
+      if (now - since.at > 8000 && now - since.retry > 20000) {
+        since.retry = now;
+        this.adb.reconnectDevice(d.serial);
+      }
+    }
+    // Wi-Fi mémorisé : reconnexion silencieuse quand le téléphone revient sur le réseau.
+    const wifi = this.store.settings.wifi || {};
+    if (wifi.auto && wifi.host && !list.some((d) => d.serial === wifi.host && d.state === 'device') && now - (this._wifiAt || 0) > 15000) {
+      this._wifiAt = now;
+      this.adb.connect(wifi.host).catch(() => {});
+    }
+    const sig = (l) => l.map((d) => `${d.serial}:${d.state}`).sort().join('|');
+    if (sig(list) === sig(this.devices)) return null;
+    if (this.task) {
+      // Pendant une tâche on ne change pas d'appareil, mais on s'arrête net si le téléphone disparaît.
+      const serial = this.device?.kind === 'usb' ? this.device.serial : '';
+      if (serial && !list.some((d) => d.serial === serial && d.state === 'device')) {
+        this.log('error', 'Téléphone déconnecté pendant la tâche : arrêt. Rebranche-le, puis relance.');
+        this.stop();
+      }
+      return null;
+    }
+    const before = this.devices.filter((d) => d.state === 'device').length;
+    await this.refresh();
+    const after = this.devices.filter((d) => d.state === 'device').length;
+    if (after > before) this.log('ok', 'Téléphone connecté.');
+    if (after < before) this.log('warn', 'Téléphone déconnecté.');
     return null;
+  }
+
+  // --- Wi-Fi (débogage par le réseau local) ------------------------------------
+
+  /** Le téléphone branché en USB passe aussi en Wi-Fi : le câble devient facultatif. */
+  async enableWifi() {
+    const d = this.device;
+    if (!d || d.kind !== 'usb' || d.serial.includes(':')) throw new Error('Branche d’abord le téléphone en USB.');
+    const ip = await d.wifiIp();
+    if (!ip) throw new Error('Le téléphone n’est connecté à aucun réseau Wi-Fi.');
+    await d.tcpip(5555);
+    const host = `${ip}:5555`;
+    let last = null;
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 1200));
+      try { await this.adb.connect(host); last = null; break; } catch (e) { last = e; }
+    }
+    if (last) throw new Error(`Connexion Wi-Fi impossible (${last.message}). Le PC et le téléphone doivent être sur le même réseau.`);
+    this.store.saveSettings({ wifi: { host, auto: true } });
+    this.log('ok', `Wi-Fi activé (${host}) : tu peux débrancher le câble.`);
+    await this.refresh();
+    return { host };
+  }
+
+  async connectWifi(host) {
+    const h = String(host || '').trim();
+    if (!/^[\w.-]+(:\d+)?$/.test(h)) throw new Error('Adresse invalide (exemple : 192.168.1.20:5555).');
+    if (!this.adb) throw new Error('adb.exe introuvable.');
+    const full = h.includes(':') ? h : `${h}:5555`;
+    await this.adb.connect(full);
+    this.store.saveSettings({ wifi: { host: full, auto: true } });
+    this.log('ok', `Connecté en Wi-Fi à ${full}.`);
+    await this.refresh();
+    return { host: full };
+  }
+
+  async forgetWifi() {
+    const host = this.store.settings.wifi?.host;
+    this.store.saveSettings({ wifi: { host: '', auto: false } });
+    if (host) await this.adb?.disconnect(host);
+    this.log('info', 'Connexion Wi-Fi oubliée.');
+    return this.refresh();
   }
 
   selectDevice(serial) {
@@ -155,8 +245,11 @@ export class Engine extends EventEmitter {
   }
 
   // --- Aperçu de l'écran ------------------------------------------------------
+  // Vrai téléphone : flux vidéo H.264, fluide. Simulateur, ou si la vidéo échoue :
+  // captures d'écran régulières.
 
   requestFrame() {
+    if (this.stream) return; // la vidéo montre déjà chaque changement
     clearTimeout(this._frameT);
     this._frameT = setTimeout(() => this.captureFrame(), 250);
   }
@@ -179,20 +272,81 @@ export class Engine extends EventEmitter {
   setLive(on) {
     this.live = !!on;
     clearInterval(this._liveT);
-    if (this.live) this._liveT = setInterval(() => this.captureFrame(), this.device?.kind === 'sim' ? 1200 : 1600);
+    this.stopStream();
+    if (!this.live || !this.device) return;
+    const d = this.device;
+    if (d.kind === 'usb' && this.streamFailed !== d.serial) {
+      this.startStream(d).catch((e) => this.streamFallback(d, e));
+      return;
+    }
+    this._liveT = setInterval(() => this.captureFrame(), d.kind === 'sim' ? 700 : 1200);
+    this.captureFrame();
   }
 
-  // --- Contrôle manuel (clics sur l'aperçu) -----------------------------------
+  async startStream(d) {
+    const st = await d.screenStream();
+    if (this.device !== d || !this.live || this.stream) return;
+    this.stream = st;
+    st.on('video', (v) => this.emit('event', { type: 'video', ...v }));
+    st.on('error', (e) => this.streamFallback(d, e));
+    st.start();
+    this.emit('event', { type: 'stream', on: true, width: st.width, height: st.height });
+  }
+
+  /** La vidéo ne marche pas sur ce téléphone : on repasse aux captures, sans bloquer le reste. */
+  streamFallback(d, e) {
+    if (this.device !== d) return;
+    this.streamFailed = d.serial;
+    this.log('warn', `Vidéo en direct indisponible (${e.message}) : aperçu image par image.`);
+    this.setLive(this.live);
+  }
+
+  stopStream() {
+    if (!this.stream) return;
+    this.stream.removeAllListeners();
+    this.stream.stop();
+    this.stream = null;
+    this.emit('event', { type: 'stream', on: false });
+  }
+
+  /** Nouvelle image clé : interface rechargée ou décodeur à réinitialiser. */
+  restartStream() {
+    if (this.stream) this.setLive(true);
+  }
+
+  // --- Contrôle manuel (gestes sur l'écran de l'app) --------------------------
 
   async manual(action, a = {}) {
-    if (!this.device) throw new Error('Aucun appareil.');
-    const { width, height } = await this.device.screenSize();
-    if (action === 'tap') await this.device.tap(a.x * width, a.y * height);
-    if (action === 'swipe') await this.device.swipe(a.x1 * width, a.y1 * height, a.x2 * width, a.y2 * height, 400);
-    if (action === 'back') await this.device.key(4);
-    if (action === 'home') await this.device.key(3);
-    if (action === 'wake') await this.device.wake();
-    if (action === 'launch') await this.device.launchApp();
+    const d = this.device;
+    if (!d) throw new Error('Aucun appareil.');
+    const gesture = ['tap', 'longpress', 'swipe', 'key', 'text', 'back', 'home', 'recents'].includes(action);
+    if (gesture && this.task) throw new Error(`Une tâche est en cours (${this.task}) : arrête-la avant de toucher l’écran.`);
+    const { width, height } = await d.screenSize();
+    const X = (v) => Math.round(Math.max(0, Math.min(1, Number(v) || 0)) * (width - 1));
+    const Y = (v) => Math.round(Math.max(0, Math.min(1, Number(v) || 0)) * (height - 1));
+    const ms = (v, min, max, def) => Math.round(Math.max(min, Math.min(max, Number(v) || def)));
+    // Vrai téléphone : commandes par le shell resté ouvert (réactif). Simulateur : appels directs.
+    const fast = d.kind === 'usb' ? (cmd) => d.fast(cmd) : null;
+    const swipe = (x1, y1, x2, y2, dur) => (fast ? fast(`input swipe ${x1} ${y1} ${x2} ${y2} ${dur}`) : d.swipe(x1, y1, x2, y2, dur));
+    const key = (code) => (fast ? fast(`input keyevent ${code}`) : d.key(code));
+    switch (action) {
+      case 'tap': await (fast ? fast(`input tap ${X(a.x)} ${Y(a.y)}`) : d.tap(X(a.x), Y(a.y))); break;
+      case 'longpress': await swipe(X(a.x), Y(a.y), X(a.x), Y(a.y), ms(a.ms, 450, 3000, 700)); break;
+      case 'swipe': await swipe(X(a.x1), Y(a.y1), X(a.x2), Y(a.y2), ms(a.ms, 60, 2000, 300)); break;
+      case 'key': {
+        const code = Number(a.code);
+        if (!MANUAL_KEYS.has(code)) throw new Error('Touche non autorisée.');
+        await key(code);
+        break;
+      }
+      case 'text': await d.typeText(String(a.text || '').slice(0, 500), { adbKeyboard: !!this.info?.adbKeyboard }); break;
+      case 'back': await key(4); break;
+      case 'home': await key(3); break;
+      case 'recents': await key(187); break;
+      case 'wake': await d.wake(); break;
+      case 'launch': await d.launchApp(); break;
+      default: throw new Error(`Action inconnue : ${action}`);
+    }
     this.requestFrame();
   }
 
@@ -257,6 +411,9 @@ export class Engine extends EventEmitter {
     return this.store.publicSettings();
   }
 }
+
+// Touches autorisées au clavier : retour, accueil, flèches, tabulation, entrée, effacer, suppr, applis récentes.
+const MANUAL_KEYS = new Set([3, 4, 19, 20, 21, 22, 61, 66, 67, 112, 187]);
 
 function pngWidth(buf) {
   return buf.length > 24 && buf[1] === 0x50 ? buf.readUInt32BE(16) : 1080;

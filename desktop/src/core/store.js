@@ -10,6 +10,7 @@ export const DEFAULT_SETTINGS = {
   scrcpyPath: '',
   serial: '',
   sim: { enabled: false, blockAfter: 0, missRate: 0 },
+  wifi: { host: '', auto: false },
   limits: { preset: 'prudent', dailyLimit: 60, hourlyLimit: 15, minDelaySec: 60, maxDelaySec: 180, warmup: true, activeStart: 9, activeEnd: 22 },
   ai: {
     provider: 'anthropic',

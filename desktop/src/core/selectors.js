@@ -11,8 +11,11 @@ export const LIKE_OFF = /^(j[’']aime|like)$/i;
 export const LIKE_ON = /^(je n[’']aime plus|ne plus aimer|aimé|unlike|liked)$/i;
 
 export const SEL = {
+  // « like_button » : vue plein écran (« clips ») ouverte depuis un hashtag ou l'explorer,
+  // boutons à droite. « row_feed_button_like » : fil classique, boutons sous l'image.
+  // Dans les deux cas le libellé reste « J’aime » : c'est `selected` qui dit si c'est liké.
   likeButton: [
-    { id: 'row_feed_button_like' },
+    { id: ['like_button', 'row_feed_button_like'] },
     { desc: LIKE_OFF, clickable: true },
     { desc: LIKE_ON, clickable: true },
   ],
@@ -20,6 +23,10 @@ export const SEL = {
     { id: ['row_feed_photo_profile_name', 'row_feed_photo_profile_name_container'] },
   ],
   postCaption: [{ id: ['row_feed_comment_textview_layout', 'row_feed_caption'] }],
+  // Vue « clips » : une publication par écran.
+  clipsAuthor: [{ id: ['clips_author_username'] }],
+  clipsCaption: [{ id: ['clips_caption_component'] }],
+  clipsMedia: [{ id: ['clips_media_component', 'clips_video_container'] }],
   // Vignettes de la grille d'un profil ou d'un hashtag.
   gridItem: [
     { id: ['image_button', 'grid_card_layout_container', 'media_set_row_content_identifier'] , clickable: true },

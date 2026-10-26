@@ -79,7 +79,7 @@ function renderDevice() {
   // ADB
   $('#adbBox').innerHTML = s.adbPath
     ? stateLine(s.adbError ? 'bad' : 'ok', s.adbError ? 'alert' : 'check', `<strong>${s.adbError ? esc(s.adbError) : `ADB ${esc(s.adbVersion)} prêt`}</strong><br><small class="muted">${esc(s.adbPath)}</small>`)
-      + stateLine(s.scrcpy ? 'ok' : 'mid', s.scrcpy ? 'check' : 'info', s.scrcpy ? `scrcpy trouvé : miroir en direct disponible.<br><small class="muted">${esc(s.scrcpy)}</small>` : 'scrcpy absent (facultatif) : l’aperçu se fait par captures d’écran.')
+      + stateLine(s.scrcpy ? 'ok' : 'mid', s.scrcpy ? 'check' : 'info', s.scrcpy ? `scrcpy trouvé : miroir dans une fenêtre séparée disponible.<br><small class="muted">${esc(s.scrcpy)}</small>` : 'scrcpy absent (facultatif) : l’écran du téléphone s’affiche déjà en vidéo dans l’app.')
     : stateLine('bad', 'alert', `<strong>adb.exe introuvable.</strong><br>Télécharge les <a data-href="https://developer.android.com/tools/releases/platform-tools">Android SDK Platform-Tools</a> (Google), dézippe-les dans <code>C:\\platform-tools</code>, puis clique sur Actualiser. Tu peux aussi indiquer le chemin dans Réglages.`);
 
   // Liste des téléphones
@@ -89,7 +89,7 @@ function renderDevice() {
     const hint = d.state === 'unauthorized' ? 'Déverrouille le téléphone et accepte « Autoriser le débogage USB ? ».' : d.state === 'offline' ? 'Débranche et rebranche le câble.' : d.usb ? 'USB' : 'Wi-Fi';
     return `<div class="dev-row"><span class="dot ${ok ? 'ok' : d.state === 'unauthorized' ? 'mid' : 'bad'}"></span><div class="meta"><strong>${esc(d.model || d.serial)}</strong><small class="muted">${esc(d.stateLabel)} · ${esc(hint)}</small></div>${ok ? (active ? '<span class="pill">Actif</span>' : `<button class="btn small" data-select="${esc(d.serial)}">Utiliser</button>`) : ''}</div>`;
   }).join('');
-  $('#devicesBox').innerHTML = rows || stateLine('mid', 'usb', '<strong>Aucun appareil.</strong><br>Branche le téléphone en USB avec le débogage activé (voir les étapes ci-dessus). La détection est automatique, toutes les 4 secondes.');
+  $('#devicesBox').innerHTML = rows || stateLine('mid', 'usb', '<strong>Aucun appareil.</strong><br>Branche le téléphone en USB avec le débogage activé (voir les étapes ci-dessus). Il apparaît ici dès qu’il est branché.');
 
   // Appareil actif
   const i = s.info;
@@ -116,6 +116,7 @@ function renderDevice() {
   chip.querySelector('.txt').textContent = s.device ? (s.device.kind === 'sim' ? 'Téléphone simulé' : i?.model || s.device.serial) : pending ? 'Autorisation en attente' : s.adbPath ? 'Aucun appareil' : 'ADB introuvable';
 
   $('#screenEmpty').hidden = !!s.device;
+  renderWifi();
   $('#screenImg').hidden = !s.device;
   $('#phoneTitle').textContent = s.device ? (s.device.kind === 'sim' ? 'Téléphone simulé' : i?.model || 'Téléphone') : 'Écran du téléphone';
   $('#scrcpyBtn').disabled = !(s.scrcpy && s.device?.kind === 'usb');
@@ -444,19 +445,111 @@ $('#logClear').addEventListener('click', () => { $('#log').innerHTML = ''; });
 
 // --- Écran du téléphone ----------------------------------------------------------------------
 
+const screenEl = $('#screen');
+const canvas = $('#screenCanvas');
+const ctx2d = canvas.getContext('2d');
+const manualOn = () => $('#manualToggle').checked;
+const HINT = 'Clic = toucher · glisser = défiler · appui long · molette · clic droit = retour · clavier = taper';
+
+try { if (localStorage.getItem('igg-manual') === '0') $('#manualToggle').checked = false; } catch { /* stockage indisponible */ }
+screenEl.classList.toggle('manual', manualOn());
+
 $('#liveToggle').addEventListener('change', (e) => call('setLive', e.target.checked));
-$('#manualToggle').addEventListener('change', (e) => $('#screen').classList.toggle('manual', e.target.checked));
+$('#manualToggle').addEventListener('change', (e) => {
+  screenEl.classList.toggle('manual', e.target.checked);
+  try { localStorage.setItem('igg-manual', e.target.checked ? '1' : '0'); } catch { /* stockage indisponible */ }
+  updateNote();
+});
 document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-manual]');
   if (b) quiet(call('manual', b.dataset.manual));
 });
 $('#scrcpyBtn').addEventListener('click', () => quiet(call('openScrcpy')));
+// Fenêtre réduite : la vidéo s'arrête (batterie du téléphone), puis reprend.
+document.addEventListener('visibilitychange', () => {
+  if ($('#liveToggle').checked) quiet(call('setLive', !document.hidden));
+});
 
-// Position relative dans l'image affichée (object-fit: contain laisse des bandes).
+// --- Affichage : vidéo H.264 (WebCodecs), ou images ----------------------------------------------
+
+let decoder = null;
+let codec = '';
+let needKey = true;
+let lastShown = 0;
+let videoFrames = 0;
+
+function updateNote(extra = '') {
+  const live = screenEl.classList.contains('video');
+  const base = live ? 'Vidéo en direct' : lastShown ? `Aperçu ${time(lastShown)}` : '';
+  $('#screenNote').textContent = [base, extra, S?.device && manualOn() ? HINT : ''].filter(Boolean).join(' · ');
+}
+
+function showImage(frame) {
+  $('#screenImg').src = frame.dataUrl;
+  lastShown = frame.t;
+  updateNote();
+}
+
+function resetDecoder() {
+  try { decoder?.close(); } catch { /* déjà fermé */ }
+  decoder = null;
+  codec = '';
+  needKey = true;
+}
+
+function onStream(e) {
+  resetDecoder();
+  if (!e.on) {
+    screenEl.classList.remove('video');
+    $('#liveBadge').hidden = true;
+    updateNote();
+  }
+}
+
+function onVideo(v) {
+  if (!('VideoDecoder' in window)) return;
+  if (needKey && !v.key) return;
+  try {
+    if (!decoder || v.codec !== codec) {
+      resetDecoder();
+      decoder = new VideoDecoder({
+        output: (frame) => {
+          if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+            canvas.width = frame.displayWidth;
+            canvas.height = frame.displayHeight;
+          }
+          ctx2d.drawImage(frame, 0, 0);
+          frame.close();
+          videoFrames++;
+          if (!screenEl.classList.contains('video')) {
+            screenEl.classList.add('video');
+            $('#liveBadge').hidden = false;
+            updateNote();
+          }
+        },
+        error: () => { resetDecoder(); quiet(call('restartStream')); },
+      });
+      decoder.configure({ codec: v.codec, optimizeForLatency: true });
+      codec = v.codec;
+    }
+    // Trop de retard (fenêtre en arrière-plan…) : on repart d'une image clé.
+    if (decoder.decodeQueueSize > 12) { resetDecoder(); quiet(call('restartStream')); return; }
+    if (v.key) needKey = false;
+    decoder.decode(new EncodedVideoChunk({ type: v.key ? 'key' : 'delta', timestamp: Math.round(performance.now() * 1000), data: v.data }));
+  } catch {
+    resetDecoder();
+    quiet(call('restartStream'));
+  }
+}
+
+// --- Contrôle tactile ------------------------------------------------------------------------------
+
+/** Position relative (0..1) dans l'image affichée (object-fit: contain laisse des bandes). */
 function relPos(ev) {
-  const img = $('#screenImg');
-  const r = img.getBoundingClientRect();
-  const ratio = img.naturalWidth / img.naturalHeight || 9 / 19.5;
+  const video = screenEl.classList.contains('video');
+  const el = video ? canvas : $('#screenImg');
+  const r = el.getBoundingClientRect();
+  const ratio = video ? canvas.width / canvas.height : ($('#screenImg').naturalWidth / $('#screenImg').naturalHeight) || 9 / 19.5;
   let w = r.width;
   let h = r.width / ratio;
   if (h > r.height) { h = r.height; w = h * ratio; }
@@ -466,17 +559,138 @@ function relPos(ev) {
   const y = (ev.clientY - y0) / h;
   return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x, y } : null;
 }
-let down = null;
-$('#screen').addEventListener('pointerdown', (e) => { if ($('#manualToggle').checked) down = relPos(e); });
-$('#screen').addEventListener('pointerup', (e) => {
-  if (!down || !$('#manualToggle').checked) return;
-  const up = relPos(e);
-  const start = down;
-  down = null;
-  if (!up) return;
-  if (S.task) return toast('Une tâche est en cours : arrête-la avant de toucher l’écran.', 'warn');
-  if (Math.hypot(up.x - start.x, up.y - start.y) < 0.02) quiet(call('manual', 'tap', { x: start.x, y: start.y }));
-  else quiet(call('manual', 'swipe', { x1: start.x, y1: start.y, x2: up.x, y2: up.y }));
+
+function touchDot(ev) {
+  const r = screenEl.getBoundingClientRect();
+  const dot = document.createElement('span');
+  dot.className = 'touch-dot';
+  dot.style.left = `${ev.clientX - r.left}px`;
+  dot.style.top = `${ev.clientY - r.top}px`;
+  screenEl.append(dot);
+  return dot;
+}
+const fadeDot = (dot) => { if (!dot) return; dot.classList.add('out'); setTimeout(() => dot.remove(), 400); };
+
+const gesture = (action, a) => quiet(call('manual', action, a));
+let touch = null;
+
+screenEl.addEventListener('pointerdown', (e) => {
+  if (!manualOn() || !S?.device || e.button !== 0) return;
+  const p = relPos(e);
+  if (!p) return;
+  screenEl.setPointerCapture(e.pointerId);
+  screenEl.focus({ preventScroll: true });
+  touch = { start: p, last: p, t: performance.now(), dot: touchDot(e), x: e.clientX, y: e.clientY };
+});
+screenEl.addEventListener('pointermove', (e) => {
+  if (!touch) return;
+  touch.last = relPos(e) || touch.last;
+  touch.dot.style.left = `${parseFloat(touch.dot.style.left) + e.clientX - touch.x}px`;
+  touch.dot.style.top = `${parseFloat(touch.dot.style.top) + e.clientY - touch.y}px`;
+  touch.x = e.clientX;
+  touch.y = e.clientY;
+});
+function endTouch(e, cancelled = false) {
+  if (!touch) return;
+  const t = touch;
+  touch = null;
+  fadeDot(t.dot);
+  if (cancelled) return;
+  const end = relPos(e) || t.last;
+  const ms = performance.now() - t.t;
+  if (Math.hypot(end.x - t.start.x, end.y - t.start.y) < 0.015) {
+    if (ms > 450) gesture('longpress', { ...t.start, ms: Math.min(ms, 2500) });
+    else gesture('tap', t.start);
+  } else {
+    // Même vitesse que le geste de la souris : un glissé lent défile lentement.
+    gesture('swipe', { x1: t.start.x, y1: t.start.y, x2: end.x, y2: end.y, ms: Math.max(80, Math.min(1500, ms)) });
+  }
+}
+screenEl.addEventListener('pointerup', (e) => endTouch(e));
+screenEl.addEventListener('pointercancel', (e) => endTouch(e, true));
+
+// Clic droit = Retour, clic molette = Accueil.
+screenEl.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  if (manualOn() && S?.device) gesture('back');
+});
+screenEl.addEventListener('auxclick', (e) => {
+  if (e.button === 1 && manualOn() && S?.device) { e.preventDefault(); gesture('home'); }
+});
+
+// Molette : les crans sont regroupés en un seul glissé.
+let wheel = null;
+screenEl.addEventListener('wheel', (e) => {
+  if (!manualOn() || !S?.device) return;
+  e.preventDefault();
+  const p = relPos(e) || { x: 0.5, y: 0.5 };
+  if (!wheel) wheel = { dy: 0, x: p.x };
+  wheel.dy += e.deltaMode === 1 ? e.deltaY * 40 : e.deltaY;
+  clearTimeout(wheel.t);
+  wheel.t = setTimeout(() => {
+    const { dy, x } = wheel;
+    wheel = null;
+    const frac = Math.max(0.15, Math.min(0.6, Math.abs(dy) / 900));
+    const dir = Math.sign(dy) || 1; // vers le bas = le doigt remonte
+    gesture('swipe', { x1: x, y1: 0.5 + (dir * frac) / 2, x2: x, y2: 0.5 - (dir * frac) / 2, ms: 260 });
+  }, 110);
+}, { passive: false });
+
+// Clavier : le texte tapé part par petits paquets, les touches spéciales une par une.
+const KEYS = { Backspace: 67, Enter: 66, Tab: 61, ArrowUp: 19, ArrowDown: 20, ArrowLeft: 21, ArrowRight: 22, Delete: 112 };
+let typed = '';
+let typedT = null;
+function flushTyped() {
+  clearTimeout(typedT);
+  if (!typed) return;
+  const text = typed;
+  typed = '';
+  gesture('text', { text });
+}
+screenEl.addEventListener('keydown', (e) => {
+  if (!manualOn() || !S?.device) return;
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+    e.preventDefault();
+    navigator.clipboard.readText().then((t) => { if (t) { flushTyped(); gesture('text', { text: t }); } }).catch(() => toast('Presse-papiers illisible.', 'warn'));
+    return;
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'Escape') { e.preventDefault(); flushTyped(); gesture('back'); return; }
+  if (KEYS[e.key]) { e.preventDefault(); flushTyped(); gesture('key', { code: KEYS[e.key] }); return; }
+  if (e.key.length === 1) {
+    e.preventDefault();
+    typed += e.key;
+    clearTimeout(typedT);
+    typedT = setTimeout(flushTyped, 300);
+  }
+});
+
+// --- Wi-Fi ---------------------------------------------------------------------------------------
+
+function renderWifi() {
+  const w = S?.settings?.wifi || {};
+  const onWifi = S?.device?.serial?.includes(':');
+  const usb = S?.device?.kind === 'usb' && !onWifi;
+  $('#wifiState').innerHTML = onWifi ? `Connecté en Wi-Fi : <strong>${esc(S.device.serial)}</strong>. Tu peux débrancher le câble.`
+    : w.host ? `Adresse mémorisée : <strong>${esc(w.host)}</strong>. Reconnexion automatique quand le téléphone est sur le réseau.`
+      : 'Pas de connexion Wi-Fi configurée.';
+  $('#wifiOn').disabled = !usb;
+  $('#wifiForget').hidden = !w.host;
+  if (w.host && !$('#wifiHost').value) $('#wifiHost').value = w.host;
+}
+$('#wifiOn').addEventListener('click', async (e) => {
+  e.currentTarget.disabled = true;
+  const r = await quiet(call('enableWifi'));
+  if (r) toast(`Wi-Fi activé (${r.host}). Tu peux débrancher le câble.`, 'ok');
+  renderWifi();
+});
+$('#wifiConnect').addEventListener('click', async () => {
+  const r = await quiet(call('connectWifi', $('#wifiHost').value));
+  if (r) toast(`Connecté à ${r.host}.`, 'ok');
+});
+$('#wifiForget').addEventListener('click', async () => {
+  await quiet(call('forgetWifi'));
+  $('#wifiHost').value = '';
 });
 
 // --- Événements du moteur -----------------------------------------------------------------------
@@ -496,7 +710,9 @@ function apply(state) {
 window.igg.on((e) => {
   switch (e.type) {
     case 'state': apply(e.state); break;
-    case 'frame': $('#screenImg').src = e.frame.dataUrl; $('#screenNote').textContent = `Aperçu ${time(e.frame.t)}${$('#manualToggle').checked ? ' · clic = tap, glisser = défiler' : ''}`; break;
+    case 'frame': showImage(e.frame); break;
+    case 'video': onVideo(e); break;
+    case 'stream': onStream(e); break;
     case 'frame-error': $('#screenNote').textContent = `Aperçu indisponible : ${e.msg}`; break;
     case 'log': addLog(e); if (e.level === 'error') toast(e.msg, 'error'); break;
     case 'wait': showWait(e.until, e.label); break;
@@ -516,5 +732,6 @@ let start = params.get('view');
 try { start ||= localStorage.getItem('igg-view'); } catch { /* rien */ }
 if (start && $(`.view[data-view="${start}"]`)) show(start);
 apply(await call('state'));
+quiet(call('restartStream')); // image clé pour le décodeur vidéo de cette fenêtre
 renderUpdate(await call('updateState'));
 call('frame');

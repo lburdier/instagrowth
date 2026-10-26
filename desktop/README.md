@@ -4,7 +4,9 @@ Application Windows qui pilote **l'app Instagram de ton téléphone Android**, b
 
 - **Bot** : ouvrir un profil ou un hashtag, lire une bio, liker des publications, préparer un message privé.
 - **Agent Claude** : tu décris une mission en une phrase. Claude voit l'écran du téléphone (capture + arbre de l'interface) et choisit lui-même les gestes : toucher, faire défiler, taper, revenir.
-- **Écran en direct** : l'écran du téléphone s'affiche dans l'app. Il peut aussi servir de télécommande (mode manuel), et un miroir scrcpy est disponible s'il est installé.
+- **Écran en direct** : l'écran du téléphone s'affiche en vidéo fluide dans l'app (H.264 via `screenrecord`, intégré à Android, rien à installer). Si la vidéo ne démarre pas sur un téléphone, l'app repasse à des captures d'écran régulières.
+- **Contrôle tactile** : l'écran de l'app pilote le téléphone. Clic = toucher, glisser = défiler (à la même vitesse que ton geste), appui long, molette = défiler, clic droit = Retour, clic molette = Accueil, et le clavier tape dans le champ actif (<kbd>Ctrl</kbd>+<kbd>V</kbd> colle le presse-papiers). Désactivable avec l'icône main.
+- **Connexion** : un téléphone branché apparaît à l'instant (`adb track-devices`). Un téléphone « hors ligne » est reconnecté tout seul, une tâche s'arrête proprement si le câble est retiré, et le téléphone peut passer en **Wi-Fi** (onglet Appareil) pour se passer du câble.
 - **Sécurité** : limites prudentes (les mêmes que l'extension), likes vérifiés à l'écran, DM jamais envoyés sans ta confirmation, bouton **Arrêt immédiat** et raccourci global <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>X</kbd>.
 
 ## À lire d'abord : USB ne veut pas dire « moins de limites »
@@ -163,5 +165,7 @@ Les données (réglages, compteurs, historique des likes) sont dans `%APPDATA%\I
 ## Limites connues
 
 - Instagram modifie parfois les identifiants de son interface. Si une action du bot ne trouve plus un bouton, mets à jour `src/core/selectors.js`. Le mode Claude lit l'écran et s'adapte sans ce fichier.
-- `uiautomator dump` peut échouer pendant qu'une vidéo tourne. L'app réessaie trois fois, puis affiche une erreur claire.
+- Certaines publications ne se laissent pas lire par `uiautomator` (« could not get idle state ») : une animation y tourne en continu, par exemple l'avatar d'un ami qui a liké. Le bot ne les touche pas et passe à la suivante (« illisible » dans le journal) ; après 8 d'affilée, il change de cible. Pour vérifier un like sur un écran devenu illisible, il regarde la couleur du cœur sur une capture. Chaque lecture de l'écran prend 2 à 3 secondes : le bot est donc volontairement plus lent qu'un humain pressé.
+- Instagram ouvre les publications d'un hashtag dans une vue plein écran (« clips », boutons à droite). Le bot la reconnaît, et ne touche jamais un cœur déjà rouge : une publication déjà likée est simplement passée.
+- Le mode Wi-Fi (`adb tcpip`) se perd au redémarrage du téléphone : rebranche le câble et clique de nouveau sur **Passer en Wi-Fi**.
 - Un écran verrouillé par code ne peut pas être déverrouillé par l'app : c'est volontaire.

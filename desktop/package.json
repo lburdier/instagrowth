@@ -1,7 +1,7 @@
 {
   "name": "instagrowth-desktop",
   "productName": "InstaGrowth Desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Pilote l'app Instagram d'un téléphone Android branché en USB (ADB) : likes vérifiés, lecture de bio, DM préparés et agent Claude.",
   "type": "module",
   "main": "src/main/main.js",

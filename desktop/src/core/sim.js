@@ -6,6 +6,7 @@
 // boutons ont les mêmes resource-id, et on peut simuler un « Réessayez plus tard ».
 
 import { rectsToPng } from './png.js';
+import { UnreadableScreenError } from './adb.js';
 
 const W = 1080;
 const H = 2400;
@@ -165,8 +166,14 @@ export class SimDevice {
 
   async swipe(x1, y1, x2, y2) {
     const s = this.screen;
-    if (this.dialog || s.type !== 'feed') return '';
+    if (this.dialog) return '';
     const dy = y1 - y2;
+    if (s.type === 'clips') {
+      // Un geste suffisant fait passer à la publication suivante (ou précédente).
+      if (Math.abs(dy) > 300) s.index = Math.max(0, Math.min(s.posts.length - 1, s.index + Math.sign(dy)));
+      return '';
+    }
+    if (s.type !== 'feed') return '';
     const max = Math.max(0, (s.posts.length - 1) * POST_H);
     s.scroll = Math.round(Math.max(0, Math.min(max, s.scroll + dy)));
     return '';
@@ -188,6 +195,9 @@ export class SimDevice {
   }
 
   async dumpUi() {
+    // Comme sur un vrai téléphone : une publication animée en continu ne se laisse pas lire.
+    const s = this.screen;
+    if (s.type === 'clips' && s.posts[s.index].animated) throw new UnreadableScreenError();
     return this.toXml(this.layout());
   }
 
@@ -215,6 +225,7 @@ export class SimDevice {
     add({ bounds: [0, 0, W, 72], draw: { kind: 'status' } });
     if (s.type === 'feed') this.layoutFeed(s, add);
     if (s.type === 'grid') this.layoutGrid(s, add);
+    if (s.type === 'clips') this.layoutClips(s, add);
     if (s.type === 'profile') this.layoutProfile(s, add);
     if (s.type === 'thread') this.layoutThread(s, add);
     if (s.type !== 'thread') this.layoutNav(add);
@@ -258,6 +269,24 @@ export class SimDevice {
     });
   }
 
+  /** Vue plein écran : boutons à droite, auteur et légende en bas, une publication par écran. */
+  layoutClips(s, add) {
+    const p = s.posts[s.index];
+    const u = this.users.get(p.user);
+    add({ bounds: [0, 100, W, 2036], id: rid('clips_media_component'), desc: `Publication de ${p.user}. Appuyez deux fois pour aimer.`, draw: { kind: 'image', hue: p.hue } });
+    add({ bounds: [0, 100, 134, 258], cls: 'android.widget.ImageView', desc: 'Retour', clickable: true, draw: { kind: 'icon', icon: 'back' }, onTap: () => this.back() });
+    add({ bounds: [179, 100, 923, 258], cls: 'android.widget.TextView', text: `#${s.tag}`, id: rid('clips_viewer_action_bar_title'), clickable: true, draw: { kind: 'text', size: 46, weight: 700 } });
+    add({ bounds: [933, 888, 1057, 1012], cls: 'android.widget.ImageView', desc: 'J’aime', id: rid('like_button'), clickable: true, selected: p.liked, draw: { kind: 'heart' }, onTap: () => this.tapLike(p) });
+    add({ bounds: [933, 1012, 1057, 1079], cls: 'android.widget.TextView', text: `Nombre de J’aime : ${p.likes + (p.liked ? 1 : 0)}. Voir les J’aime`, desc: `Nombre de J’aime : ${p.likes + (p.liked ? 1 : 0)}. Voir les J’aime`, id: rid('like_count'), clickable: true, draw: { kind: 'text', size: 30 } });
+    add({ bounds: [933, 1079, 1057, 1203], cls: 'android.widget.ImageView', desc: 'Commentaire', id: rid('comment_button'), clickable: true, draw: { kind: 'icon', icon: 'comment' } });
+    add({ bounds: [933, 1461, 1057, 1585], cls: 'android.widget.ImageView', desc: 'Partager', id: rid('direct_share_button'), clickable: true, draw: { kind: 'icon', icon: 'share' } });
+    add({ bounds: [933, 1608, 1057, 1732], cls: 'android.widget.ImageView', desc: 'Enregistrer', id: rid('save_button'), clickable: true, draw: { kind: 'icon', icon: 'save' } });
+    add({ bounds: [45, 1665, 146, 1766], cls: 'android.widget.ImageView', desc: `Photo de profil de ${p.user}`, id: rid('clips_author_profile_pic'), clickable: true, draw: { kind: 'avatar', hue: (p.hue + 40) % 360 }, onTap: () => this.openProfile(p.user) });
+    add({ bounds: [160, 1667, 600, 1717], cls: 'android.widget.TextView', text: p.user, desc: p.user, id: rid('clips_author_username'), clickable: true, draw: { kind: 'text', size: 40, weight: 600 }, onTap: () => this.openProfile(p.user) });
+    add({ bounds: [45, 1766, 933, 1889], id: rid('clips_caption_component') });
+    add({ bounds: [45, 1777, 933, 1889], cls: 'android.widget.TextView', desc: `${p.caption}${u?.name ? ` · ${u.name}` : ''}`, clickable: true, draw: { kind: 'text', size: 36, lines: wrap(p.caption, 44) } });
+  }
+
   layoutGrid(s, add) {
     this.topBar(add, `#${s.tag}`);
     add({ bounds: [40, 250, 300, 460], cls: 'android.widget.ImageView', draw: { kind: 'avatar', hue: 200, square: true } });
@@ -265,7 +294,8 @@ export class SimDevice {
     add({ bounds: [340, 360, 1040, 420], cls: 'android.widget.TextView', text: `${fmt(12400 + s.tag.length * 997)} publications`, draw: { kind: 'text', size: 36, muted: true } });
     add({ bounds: [0, 500, 540, 590], cls: 'android.widget.TextView', text: 'Meilleures publications', clickable: true, selected: true, draw: { kind: 'tab', active: true } });
     add({ bounds: [540, 500, W, 590], cls: 'android.widget.TextView', text: 'Récentes', clickable: true, draw: { kind: 'tab' } });
-    this.grid(add, s.posts, 600, (i) => this.push({ type: 'feed', posts: s.posts.slice(i), scroll: 0 }));
+    // Comme Instagram 452 : une publication de hashtag s'ouvre en plein écran (« clips »).
+    this.grid(add, s.posts, 600, (i) => this.push({ type: 'clips', tag: s.tag, posts: s.posts, index: i }));
   }
 
   grid(add, posts, y0, onOpen) {

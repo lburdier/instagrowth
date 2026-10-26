@@ -79,12 +79,23 @@ export class Agent {
 
   async observe() {
     const device = this.ctx.getDevice();
-    const [png, xml, size] = [await device.screencap({ signal: this.signal }), await device.dumpUi({ signal: this.signal }), await device.screenSize()];
+    const png = await device.screencap({ signal: this.signal });
+    const size = await device.screenSize();
+    let nodes = [];
+    let unreadable = false;
+    try {
+      nodes = parseUiXml(await device.dumpUi({ signal: this.signal }));
+    } catch (e) {
+      if (e.name !== 'UnreadableScreenError') throw e;
+      unreadable = true;
+    }
     const img = await this.ctx.prepareImage(png);
     const scale = img.width / size.width;
-    const nodes = parseUiXml(xml);
     this.last = { nodes, scale, size };
-    return { image: img, tree: compactTree(nodes, scale), scale, nodes };
+    const tree = unreadable
+      ? '(arbre illisible : une animation tourne en continu à l’écran. Seule la capture est disponible ; aucun élément n’est numéroté. Fais défiler vers la publication suivante ou reviens en arrière.)'
+      : compactTree(nodes, scale);
+    return { image: img, tree, scale, nodes };
   }
 
   observationText(obs) {
