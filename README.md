@@ -1,297 +1,299 @@
 <div align="center">
 
+**English** · [Français](README.fr.md)
+
 <img src="icons/icon128.png" width="96" alt="InstaGrowth">
 
 # InstaGrowth
 
-**Extension Chrome qui ajoute des outils de croissance directement dans Instagram :**
-statistiques et analyse IA de tes publications, programmation, leads, auto-like vérifié, téléchargement, mode fantôme pour les stories.
+**A Chrome extension that adds growth tools right inside Instagram:**
+stats and AI analysis of your posts, scheduling, leads, verified auto-like, downloads, ghost mode for stories.
 
-[Télécharger la dernière version](../../releases/latest) · [Installation](#installation) · [Visite guidée](#visite-guidée) · [Dépannage](#dépannage)
+[Download the latest version](../../releases/latest) · [Installation](#installation) · [Tour](#tour) · [Troubleshooting](#troubleshooting)
 
-<img src="docs/screenshots/instagram-profile.png" alt="Le bouton InstaGrowth et son menu sur un profil" width="900">
+<img src="docs/screenshots/instagram-profile.png" alt="The InstaGrowth button and its menu on a profile" width="900">
 
 </div>
 
-> Les captures de cette page utilisent des **données de démonstration** (comptes et chiffres fictifs). Les vues « sur Instagram » sont présentées sur une maquette générique, pour montrer où l'extension ajoute ses boutons.
+> The extension's interface is in French. The screenshots on this page use **demo data** (fictional accounts and numbers). The "on Instagram" views are shown on a generic mock-up, to illustrate where the extension adds its buttons.
 
 ---
 
-## Sommaire
+## Contents
 
 - [Installation](#installation)
-- [Premiers pas](#premiers-pas)
-- [Visite guidée](#visite-guidée)
-  - [Dans Instagram](#dans-instagram)
-  - [Statistiques et publications récentes](#statistiques-et-publications-récentes)
-  - [Analyse IA d'une publication](#analyse-ia-dune-publication)
-  - [Analyser un autre compte](#analyser-un-autre-compte)
+- [Getting started](#getting-started)
+- [Tour](#tour)
+  - [Inside Instagram](#inside-instagram)
+  - [Stats and recent posts](#stats-and-recent-posts)
+  - [AI analysis of a post](#ai-analysis-of-a-post)
+  - [Analyse another account](#analyse-another-account)
   - [Auto-like](#auto-like)
-  - [Automatisations](#automatisations)
-  - [Publication et programmation](#publication-et-programmation)
+  - [Automations](#automations)
+  - [Publishing and scheduling](#publishing-and-scheduling)
   - [Leads](#leads)
-  - [Réglages et IA](#réglages-et-ia)
+  - [Settings and AI](#settings-and-ai)
   - [Popup](#popup)
-- [Sécurité du compte et limites](#sécurité-du-compte-et-limites)
-- [Dépannage](#dépannage)
-- [Confidentialité](#confidentialité)
-- [Pour les développeurs](#pour-les-développeurs)
+- [Account safety and limits](#account-safety-and-limits)
+- [Troubleshooting](#troubleshooting)
+- [Privacy](#privacy)
+- [For developers](#for-developers)
 
 ---
 
 ## Installation
 
-InstaGrowth n'est pas publiée sur le Chrome Web Store : elle s'installe en **mode développeur**, en 2 minutes. Ça marche avec Chrome, Edge, Brave, Comet et tout navigateur basé sur Chromium.
+InstaGrowth is not on the Chrome Web Store: it installs in **developer mode**, in 2 minutes. It works with Chrome, Edge, Brave, Comet and any Chromium-based browser.
 
-### 1. Télécharger l'extension
+### 1. Download the extension
 
-1. Ouvre la page des [releases](../../releases/latest).
-2. Dans **Assets**, télécharge `instagrowth-vX.Y.Z.zip` (le numéro le plus récent).
-3. **Décompresse** le fichier : clic droit sur le zip, puis « Extraire tout… ». Tu obtiens un dossier qui contient `manifest.json`, `icons/` et `src/`.
-4. Range ce dossier à un endroit où il restera, par exemple `Documents/InstaGrowth`. **Ne le supprime pas** : le navigateur charge l'extension depuis ce dossier.
+1. Open the [releases](../../releases/latest) page.
+2. Under **Assets**, download `instagrowth-vX.Y.Z.zip` (the highest number).
+3. **Unzip** it: right-click the zip, then "Extract all…". You get a folder containing `manifest.json`, `icons/` and `src/`.
+4. Put this folder somewhere permanent, for example `Documents/InstaGrowth`. **Don't delete it**: the browser loads the extension from this folder.
 
-### 2. Charger l'extension dans le navigateur
+### 2. Load the extension in the browser
 
-1. Ouvre la page des extensions :
-   - Chrome, Brave ou Comet : tape `chrome://extensions` dans la barre d'adresse ;
-   - Edge : tape `edge://extensions`.
-2. Active **Mode développeur** : l'interrupteur en haut à droite (dans la barre de gauche sur Edge).
-3. Clique sur **Charger l'extension non empaquetée**.
-4. Sélectionne le dossier décompressé, celui qui contient `manifest.json`.
-5. La carte **InstaGrowth** apparaît. Clique sur l'icône puzzle de la barre d'outils, puis sur l'épingle à côté d'InstaGrowth, pour garder son icône visible.
+1. Open the extensions page:
+   - Chrome, Brave or Comet: type `chrome://extensions` in the address bar;
+   - Edge: type `edge://extensions`.
+2. Turn on **Developer mode**: the switch at the top right (in the left sidebar on Edge).
+3. Click **Load unpacked**.
+4. Select the unzipped folder, the one containing `manifest.json`.
+5. The **InstaGrowth** card appears. Click the puzzle icon in the toolbar, then the pin next to InstaGrowth, to keep its icon visible.
 
-> À la première installation, la page **Réglages & IA** s'ouvre automatiquement.
+> On first install, the **Réglages & IA** (Settings & AI) page opens automatically.
 
-### 3. Mettre à jour
+### 3. Update
 
-Depuis la v0.8.0, **InstaGrowth te prévient quand une nouvelle version sort** : notification, pastille « MAJ » sur son icône et bandeau dans le dashboard et la popup. Le bandeau propose **Télécharger**, **Nouveautés** et **Recharger l’extension**. Pour installer la mise à jour :
+Since v0.8.0, **InstaGrowth tells you when a new version is out**: a notification, a "MAJ" badge on its icon and a banner in the dashboard and the popup. The banner offers **Download**, **What's new** and **Reload the extension**. To install the update:
 
-1. Télécharge et décompresse le nouveau zip.
-2. Remplace le contenu de ton dossier InstaGrowth par les nouveaux fichiers. Tes données (réglages, leads, historique) sont conservées : elles sont stockées dans le navigateur, pas dans le dossier.
-3. Dans `chrome://extensions`, clique sur ⟳ (**Recharger**) sur la carte InstaGrowth.
-4. **Recharge tes onglets Instagram** (F5) : les pages déjà ouvertes gardent l'ancienne version.
+1. Download and unzip the new zip.
+2. Replace the contents of your InstaGrowth folder with the new files. Your data (settings, leads, history) is kept: it is stored in the browser, not in the folder.
+3. In `chrome://extensions`, click ⟳ (**Reload**) on the InstaGrowth card.
+4. **Reload your Instagram tabs** (F5): pages already open keep the old version.
 
-### Désinstaller
+### Uninstall
 
-Dans `chrome://extensions`, clique sur **Supprimer** sur la carte InstaGrowth. Toutes les données de l'extension sont effacées du navigateur.
-
----
-
-## Premiers pas
-
-1. **Connecte-toi à Instagram** sur [instagram.com](https://www.instagram.com) dans ce navigateur. InstaGrowth utilise ta session, aucun mot de passe n'est demandé.
-2. **Garde un onglet instagram.com ouvert** : c'est par lui que passent les requêtes, exactement comme le site.
-3. **Connecte une IA** dans **Réglages & IA** : clique sur **Se connecter avec Claude** ou colle ta clé, ou connecte **OpenRouter** pour utiliser des modèles gratuits.
-4. Remplis ton **profil de marque** (niche, audience, ton, offre) : l'IA s'en sert pour toutes ses suggestions.
-5. Sur ton profil Instagram, clique sur le bouton bleu **InstaGrowth**.
-
-Chaque écran commence par un encart **« Comment ça marche ? »** : un mini-tuto de 3 ou 4 étapes. Replie-le quand tu n'en as plus besoin ; il reste replié.
+In `chrome://extensions`, click **Remove** on the InstaGrowth card. All the extension's data is erased from the browser.
 
 ---
 
-## Visite guidée
+## Getting started
 
-### Dans Instagram
+1. **Log in to Instagram** at [instagram.com](https://www.instagram.com) in this browser. InstaGrowth uses your session; it never asks for a password.
+2. **Keep an instagram.com tab open**: requests go through it, exactly like the website's own.
+3. **Connect an AI** in **Réglages & IA**: click **Se connecter avec Claude** (Sign in with Claude) or paste your key, or connect **OpenRouter** to use free models.
+4. Fill in your **brand profile** (niche, audience, tone, offer): the AI uses it for all its suggestions.
+5. On your Instagram profile, click the blue **InstaGrowth** button.
 
-<img src="docs/screenshots/instagram-profile.png" alt="Bouton InstaGrowth sur le profil" width="900">
+Every screen starts with a **"Comment ça marche ?"** (How does it work?) box: a 3- or 4-step mini tutorial. Collapse it when you no longer need it; it stays collapsed.
 
-InstaGrowth s'intègre à l'interface d'Instagram, dans son style (thème clair ou sombre) :
+---
 
-- **Navigation de gauche** : une entrée **InstaGrowth** ouvre le menu des outils.
-- **Ton profil** : un bouton bleu **InstaGrowth** à côté de « Modifier le profil ». Il donne accès aux Statistiques, à la Programmation, aux Leads, à l'Auto-like, aux Réglages et au **mode fantôme**.
-- **Profils des autres comptes** : boutons **Analyser** (statistiques et revue IA du compte) et **Lead** (ajout à ton CRM).
-- **Grille de ton profil** : au survol d'une miniature, un bouton **Analyser** ouvre l'analyse IA de la publication.
+## Tour
 
-Chaque outil s'ouvre dans une fenêtre par-dessus Instagram, sans quitter la page.
+### Inside Instagram
 
-<img src="docs/screenshots/instagram-post.png" alt="Boutons IA et Télécharger sous une publication" width="900">
+<img src="docs/screenshots/instagram-profile.png" alt="InstaGrowth button on the profile" width="900">
 
-Sous chaque publication, deux icônes rejoignent J'aime, Commenter et Partager :
+InstaGrowth blends into Instagram's interface, in its style (light or dark theme):
 
-- **IA** (étincelle) : **Analyser ce post**, ou **Suggérer un commentaire**. L'IA propose 3 commentaires adaptés à la publication, et un clic insère celui que tu choisis dans le champ (tu l'envoies toi-même).
-- **Télécharger** (flèche) : enregistre la photo, toutes les slides d'un carrousel ou la vidéo, en meilleure qualité, dans `Téléchargements/InstaGrowth/`.
+- **Left navigation**: an **InstaGrowth** entry opens the tools menu.
+- **Your profile**: a blue **InstaGrowth** button next to "Edit profile". It gives access to Stats, Scheduling, Leads, Auto-like, Settings and **ghost mode**.
+- **Other accounts' profiles**: **Analyser** (stats and AI review of the account) and **Lead** (add to your CRM) buttons.
+- **Your profile grid**: hover a thumbnail and an **Analyser** button opens the AI analysis of that post.
 
-Dans les **messages privés**, une icône IA dans la zone de saisie lit les derniers messages et propose 3 réponses.
+Each tool opens in a window over Instagram, without leaving the page.
 
-**Vue téléphone** (onglets Messages et Insta mobile du dashboard) : par défaut, elle affiche Instagram dans un cadre étroit. L'option **Imiter un iPhone** donne la vraie version mobile, nécessaire pour publier des stories. Elle est désactivée par défaut, car Instagram voit alors ta session à la fois sur ton PC et sur un « iPhone », ce qui peut provoquer des déconnexions.
+<img src="docs/screenshots/instagram-post.png" alt="AI and Download buttons under a post" width="900">
 
-**Mode fantôme stories** : une fois activé (menu InstaGrowth, popup ou Réglages), tu regardes les stories sans apparaître dans la liste des vues. Un badge « Mode fantôme » s'affiche pendant la lecture. Seul l'accusé « story vue » est bloqué : tes messages et notifications fonctionnent normalement.
+Under every post, two icons join Like, Comment and Share:
 
-### Statistiques et publications récentes
+- **AI** (sparkle): **Analyse this post**, or **Suggest a comment**. The AI suggests 3 comments suited to the post, and one click inserts the one you pick into the field (you send it yourself).
+- **Download** (arrow): saves the photo, every slide of a carousel or the video, in the best quality, to `Downloads/InstaGrowth/`.
 
-<img src="docs/screenshots/dashboard.png" alt="Statistiques et tableau des publications récentes" width="900">
+In **direct messages**, an AI icon in the input area reads the latest messages and suggests 3 replies.
 
-- **Chiffres clés** : abonnés (évolution sur 7 et 30 jours, à partir d'un relevé par jour), taux d'engagement comparé à des repères selon ta taille, j'aime et commentaires moyens, rythme de publication.
-- **Publications récentes** : chaque publication avec sa date, son format, ses j'aime, commentaires, vues, son taux d'engagement et son **écart par rapport à ta moyenne** (en vert au-dessus, en rouge en dessous). Tri Récentes, Top ou Flops, vue tableau ou grille.
-- Plus bas : courbe d'abonnés, diagnostic express, engagement par jour et par heure, performances par format et par longueur de légende, hashtags, et une **revue IA** complète du compte (note, forces, faiblesses, plan d'action sur 30 jours, idées de posts).
+**Phone view** (Messages and Insta mobile tabs of the dashboard): by default, it shows Instagram in a narrow frame. The **Imiter un iPhone** (Imitate an iPhone) option gives the real mobile version, needed to post stories. It is off by default, because Instagram then sees your session on both your PC and an "iPhone", which can cause logouts.
 
-### Analyse IA d'une publication
+**Story ghost mode**: once on (InstaGrowth menu, popup or Settings), you watch stories without showing up in the viewers list. A "Mode fantôme" badge is shown while watching. Only the "story seen" receipt is blocked: your messages and notifications work normally.
 
-<img src="docs/screenshots/post-analysis.png" alt="Analyse IA d'une publication" width="900">
+### Stats and recent posts
 
-Clique sur une publication du tableau, sur **Analyser un post** (pour coller un lien), ou sur le bouton IA d'une publication Instagram. Tu obtiens :
+<img src="docs/screenshots/dashboard.png" alt="Stats and recent posts table" width="900">
 
-- les chiffres de la publication **comparés à ta moyenne** ;
-- un **diagnostic IA** : note sur 10, pourquoi elle a marché ou non, critique de l'accroche et de la légende, hashtags et horaire, **3 légendes réécrites**, idées pour la recycler (reel, story, suite).
+- **Key figures**: followers (7- and 30-day change, from one snapshot per day), engagement rate compared with benchmarks for your size, average likes and comments, posting frequency.
+- **Recent posts**: each post with its date, format, likes, comments, views, engagement rate and **difference from your average** (green above, red below). Sort by Recent, Top or Flops, table or grid view.
+- Further down: follower curve, quick diagnosis, engagement by day and hour, performance by format and caption length, hashtags, and a full **AI review** of the account (score, strengths, weaknesses, 30-day action plan, post ideas).
 
-### Analyser un autre compte
+### AI analysis of a post
 
-<img src="docs/screenshots/compare.png" alt="Comparaison avec un autre compte" width="900">
+<img src="docs/screenshots/post-analysis.png" alt="AI analysis of a post" width="900">
 
-Dans **Statistiques**, tape `@nom` dans **Analyser un autre compte**, ou clique sur **Analyser** depuis son profil Instagram. Les comptes récemment analysés restent accessibles en un clic.
+Click a post in the table, **Analyser un post** (to paste a link), or the AI button of an Instagram post. You get:
 
-- **Comparer avec mon compte** : toi face à ce compte (abonnés, engagement, j'aime et commentaires moyens, rythme, hashtags, meilleur format, meilleur créneau). La meilleure valeur est en vert.
-- **Ajouter aux leads** : l'ajoute à ton CRM.
+- the post's numbers **compared with your average**;
+- an **AI diagnosis**: score out of 10, why it worked or not, critique of the hook and caption, hashtags and timing, **3 rewritten captions**, ideas to repurpose it (reel, story, follow-up).
+
+### Analyse another account
+
+<img src="docs/screenshots/compare.png" alt="Comparison with another account" width="900">
+
+In **Statistiques**, type `@name` in **Analyser un autre compte**, or click **Analyser** on their Instagram profile. Recently analysed accounts stay one click away.
+
+- **Compare with my account**: you against this account (followers, engagement, average likes and comments, frequency, hashtags, best format, best time slot). The better value is shown in green.
+- **Add to leads**: adds it to your CRM.
 
 ### Auto-like
 
-<img src="docs/screenshots/autolike.png" alt="Vue d'ensemble de l'auto-like" width="900">
+<img src="docs/screenshots/autolike.png" alt="Auto-like overview" width="900">
 
-L'auto-like like chaque jour des publications de ton audience cible (hashtags de ta niche, abonnés de comptes concurrents, ou **ta propre liste de prospects**), pour te faire découvrir et générer des leads.
+Auto-like likes posts from your target audience every day (hashtags in your niche, followers of competitor accounts, or **your own prospect list**), to get you discovered and generate leads.
 
-- **Vue d'ensemble** : likes du jour face à la limite, statut en direct, prochain like, file d'attente, historique sur 14 jours, derniers comptes likés. Le bouton **Liker maintenant** lance un passage immédiat.
-- **Chaque like est réel et vérifié** : il n'est compté que si Instagram le confirme.
-- **Quand tous les comptes disponibles ont été likés**, un message et une notification te demandent d'ajouter de nouveaux hashtags, concurrents ou prospects. Le bouton **Ajouter des comptes** t'emmène directement au bon endroit.
-- Option **Notification à chaque like** : notification du système, ou petite bulle dans Instagram.
+- **Overview**: today's likes against the limit, live status, next like, queue, 14-day history, last liked accounts. The **Liker maintenant** (Like now) button starts a run immediately.
+- **Every like is real and verified**: it only counts once Instagram confirms it.
+- **When every available account has been liked**, a message and a notification ask you to add new hashtags, competitors or prospects. The **Ajouter des comptes** (Add accounts) button takes you straight to the right place.
+- **Notification on every like** option: a system notification, or a small bubble inside Instagram.
 
-<img src="docs/screenshots/autolike-settings.png" alt="Réglages de l'auto-like : cibles, liste de prospects, limites" width="900">
+<img src="docs/screenshots/autolike-settings.png" alt="Auto-like settings: targets, prospect list, limits" width="900">
 
-Dans **Auto-like → Réglages**, tu choisis tes cibles : hashtags, comptes concurrents, et une **liste de prospects** (un compte par ligne). Le bouton **Importer mes leads** la remplit avec tes leads. Chaque prospect reçoit au plus un like tous les 30 jours, en priorité. Tu y règles aussi les limites, la plage horaire, les jours actifs et les notifications.
+In **Auto-like → Réglages**, choose your targets: hashtags, competitor accounts, and a **prospect list** (one account per line). The **Importer mes leads** (Import my leads) button fills it with your leads. Each prospect gets at most one like every 30 days, with priority. You also set the limits, time window, active days and notifications there.
 
-<img src="docs/screenshots/autolike-liked.png" alt="Liste détaillée des comptes likés" width="900">
+<img src="docs/screenshots/autolike-liked.png" alt="Detailed list of liked accounts" width="900">
 
-L'onglet **Comptes likés** liste chaque compte liké : abonnés, publication likée, source, date, mention « vérifié », **follow-back** (t'a suivi, pas encore, à vérifier) et statut de lead. Un clic sur une ligne affiche la bio et les compteurs. Tu peux filtrer par période, source et follow-back, et exporter en CSV.
+The **Comptes likés** (Liked accounts) tab lists every liked account: followers, liked post, source, date, "verified" mark, **follow-back** (followed you, not yet, to check) and lead status. Click a row to see the bio and counters. Filter by period, source and follow-back, and export to CSV.
 
-### Automatisations
+### Automations
 
-<img src="docs/screenshots/automations.png" alt="Automatisations de l'auto-like" width="900">
+<img src="docs/screenshots/automations.png" alt="Auto-like automations" width="900">
 
-Des règles à activer une par une. Elles ajoutent des cibles prioritaires dans la file, avec les mêmes plafonds et délais :
+Rules you turn on one by one. They add priority targets to the queue, with the same caps and delays:
 
-- **Liker mes nouveaux abonnés** : un merci discret à chaque nouvel abonné.
-- **Rendre les likes** : like une publication des personnes qui ont liké ta dernière publication.
-- **Comptes VIP** : like chaque nouvelle publication de tes partenaires, clients ou influenceurs.
-- **Entretenir mes leads** : like régulièrement tes leads chauds ou contactés.
+- **Like my new followers**: a discreet thank-you to every new follower.
+- **Return likes**: like a post from people who liked your latest post.
+- **VIP accounts**: like every new post from your partners, clients or influencers.
+- **Nurture my leads**: regularly like your warm or contacted leads.
 
-Chaque règle a sa fréquence, son nombre maximum par passage, un bouton **Lancer maintenant** et l'heure de son dernier passage. Les jours actifs et la plage horaire se règlent dans **Auto-like → Réglages**.
+Each rule has its own frequency, maximum per run, a **Lancer maintenant** (Run now) button and the time of its last run. Active days and the time window are set in **Auto-like → Réglages**.
 
-### Publication et programmation
+### Publishing and scheduling
 
-<img src="docs/screenshots/publisher.png" alt="Éditeur de publication avec assistant IA" width="900">
+<img src="docs/screenshots/publisher.png" alt="Post editor with AI assistant" width="900">
 
-- **Médias** : photos, carrousels (jusqu'à 10) et vidéos, recadrage 1:1, 4:5, 1.91:1 ou original, réordonnables par glisser-déposer.
-- **Légende** : compteurs (2 200 caractères, 30 hashtags), **aperçu fidèle** du rendu, premier commentaire, sets de hashtags.
-- **Assistant IA** : 3 légendes à partir d'un brief et d'un style, réécriture (améliorer, raccourcir, ajouter un CTA, des emojis, traduire), hashtags sur trois niveaux avec leur volume réel.
-- **Programmation** : suggestion de ton **meilleur créneau** d'après tes statistiques, calendrier éditorial, brouillons. Par défaut, tu reçois une **notification** à l'heure prévue. La publication automatique des photos est disponible en option (expérimentale). Les reels et vidéos se publient via **Insta mobile**.
+- **Media**: photos, carousels (up to 10) and videos, 1:1, 4:5, 1.91:1 or original crop, reordered by drag and drop.
+- **Caption**: counters (2,200 characters, 30 hashtags), **faithful preview** of the result, first comment, hashtag sets.
+- **AI assistant**: 3 captions from a brief and a style, rewriting (improve, shorten, add a CTA, emojis, translate), three tiers of hashtags with their real volume.
+- **Scheduling**: suggests your **best time slot** from your stats, editorial calendar, drafts. By default you get a **notification** at the planned time. Automatic photo publishing is available as an option (experimental). Reels and videos are published through **Insta mobile**.
 
 ### Leads
 
-<img src="docs/screenshots/leads.png" alt="Recherche de leads et mini-CRM" width="900">
+<img src="docs/screenshots/leads.png" alt="Lead search and mini-CRM" width="900">
 
-- **Trouver des leads** : par hashtags ou parmi les abonnés de concurrents (**plusieurs à la fois, séparés par des virgules**), parmi les personnes qui ont liké une publication, ou en important une liste. Filtres sur les abonnés, les mots-clés de la bio, les comptes pro et la présence d'un email ou d'un téléphone.
-- **Ajouter un lead** à la main : un @compte (ou le lien de son profil), avec en option nom, email, téléphone, statut et note. Le reste (photo, abonnés, bio) est récupéré automatiquement.
-- **Bio et contacts** : récupérés automatiquement, en arrière-plan, pour les leads qui n'en ont pas encore. Le bouton **Compléter les infos** lance la récupération tout de suite.
-- **Mini-CRM** : filtres par statut avec compteurs (Nouveau, Liké, Chaud, Contacté, A répondu, Gagné, Perdu), tri, **score IA** sur 100 en couleur, icônes de contact (email, téléphone, site), notes, actions groupées sur la sélection, export CSV.
-- **Message d'approche IA** personnalisé pour chaque lead. L'envoi reste manuel, volontairement : les messages automatiques sont la première cause de blocage.
+- **Find leads**: by hashtags or among competitors' followers (**several at once, comma-separated**), among people who liked a post, or by importing a list. Filters on followers, bio keywords, business accounts and whether an email or phone number is shown.
+- **Add a lead** by hand: an @account (or its profile link), with optional name, email, phone, status and note. The rest (photo, followers, bio) is fetched automatically.
+- **Bio and contacts**: fetched automatically in the background for leads that don't have them yet. The **Compléter les infos** (Fill in details) button fetches them right away.
+- **Mini-CRM**: status filters with counters (New, Liked, Warm, Contacted, Replied, Won, Lost), sorting, colour-coded **AI score** out of 100, contact icons (email, phone, website), notes, bulk actions on the selection, CSV export.
+- **Personalised AI outreach message** for each lead. Sending stays manual, on purpose: automated messages are the number one cause of blocks.
 
-### Réglages et IA
+### Settings and AI
 
-<img src="docs/screenshots/settings.png" alt="Réglages : fournisseur d'IA, marque, mode fantôme" width="900">
+<img src="docs/screenshots/settings.png" alt="Settings: AI provider, brand, ghost mode" width="900">
 
-- **Claude (Anthropic)** : clique sur **Se connecter avec Claude**. La console Claude s'ouvre, tu crées une clé et tu cliques sur **Connecter à InstaGrowth** dans la carte qui apparaît. Tu peux aussi coller directement une clé `sk-ant-…`. Modèles proposés : Opus 5.5 (par défaut), Sonnet 5.5, Haiku 5.5 et Fable 5.1.
-- **OpenRouter** : connexion en un clic (OAuth), avec la liste des **modèles gratuits**.
-- **Compatible OpenAI** : Ollama ou LM Studio en local, Groq, Mistral…
-- **Profil de marque**, mode de **publication programmée**, **mode fantôme**, export ou remise à zéro des données.
+- **Claude (Anthropic)**: click **Se connecter avec Claude**. The Claude console opens, you create a key and click **Connecter à InstaGrowth** in the card that appears. You can also paste an `sk-ant-…` key directly. Available models: Opus 5.5 (default), Sonnet 5.5, Haiku 5.5 and Fable 5.1.
+- **OpenRouter**: one-click connection (OAuth), with the list of **free models**.
+- **OpenAI-compatible**: Ollama or LM Studio locally, Groq, Mistral…
+- **Brand profile**, **scheduled publishing** mode, **ghost mode**, data export or reset.
 
 ### Popup
 
-<img src="docs/screenshots/popup.png" alt="Popup de l'extension" width="300">
+<img src="docs/screenshots/popup.png" alt="Extension popup" width="300">
 
-L'icône de la barre d'outils affiche ton compte, l'état de l'auto-like (likes du jour), le mode fantôme, le prochain post programmé, et des raccourcis vers chaque outil.
+The toolbar icon shows your account, auto-like status (today's likes), ghost mode, the next scheduled post, and shortcuts to every tool.
 
-### Plusieurs comptes Instagram
+### Several Instagram accounts
 
-Les données sont **séparées par compte** : auto-like, comptes likés, automatisations, relevés d'abonnés. Les leads et les posts programmés sont rattachés au compte qui les a créés, et **un post n'est jamais publié sur un autre compte**.
-
----
-
-## Sécurité du compte et limites
-
-Instagram ne propose **aucune API officielle** pour liker, ni pour lire les hashtags ou les abonnés. InstaGrowth utilise donc l'**API web** d'instagram.com avec ta session, comme les autres outils de ce type. Garde-fous intégrés :
-
-- **Plafonds stricts**, non modifiables : 200 likes par jour, 40 par heure, 30 s minimum entre deux likes, 180 lectures par heure.
-- **Préréglages** Prudent (60 par jour), Normal (100) et Actif (150), avec une **montée en charge progressive** sur 7 jours.
-- **Comportement humain** : délais aléatoires, pauses naturelles, plage horaire et jours actifs, ordre des cibles mélangé, un seul like par personne sur 30 jours.
-- **Arrêt automatique** au moindre signal d'Instagram : limite de requêtes (pause de 2 h), action bloquée (24 h), vérification de sécurité (48 h).
-- Les messages privés ne sont **jamais envoyés automatiquement**.
-
-> **Important.** L'automatisation (auto-like, publication automatique) va à l'encontre des conditions d'utilisation d'Instagram et peut entraîner un blocage temporaire, voire une suspension. Utilise-la avec modération : tu restes responsable de ton compte. Télécharge uniquement des contenus que tu as le droit de réutiliser.
+Data is **kept separate per account**: auto-like, liked accounts, automations, follower snapshots. Leads and scheduled posts belong to the account that created them, and **a post is never published on another account**.
 
 ---
 
-## Dépannage
+## Account safety and limits
 
-**« Non connecté à Instagram » alors que je suis connecté**
-Recharge l'onglet instagram.com et laisse-le ouvert. Depuis la v0.6.3, l'extension détecte mieux la session et reprend toute seule. Si besoin, clique sur **Réessayer maintenant**.
+Instagram offers **no official API** to like posts, or to read hashtags or followers. InstaGrowth therefore uses instagram.com's **web API** with your session, like other tools of this kind. Built-in safeguards:
 
-**Instagram me déconnecte de temps en temps**
-Ouvre **Réglages & IA → Connexion Instagram** : chaque déconnexion y est enregistrée avec les actions de l'extension dans les 15 minutes précédentes. Les automatisations se mettent en pause automatiquement. Causes les plus fréquentes :
-- l'option **Imiter un iPhone** de la vue téléphone : désactive-la ;
-- des rafales de requêtes pendant des tests (recherches de leads, statistiques répétées) : espace-les ;
-- l'émulation mobile des outils de développement (DevTools) laissée active sur l'onglet Instagram.
+- **Strict caps** that cannot be changed: 200 likes per day, 40 per hour, at least 30 s between two likes, 180 reads per hour.
+- **Presets** Careful (60 per day), Normal (100) and Active (150), with a **gradual ramp-up** over 7 days.
+- **Human-like behaviour**: random delays, natural pauses, time window and active days, shuffled target order, one like per person every 30 days at most.
+- **Automatic stop** at the first signal from Instagram: rate limit (2 h pause), action blocked (24 h), security check (48 h).
+- Direct messages are **never sent automatically**.
 
-Si la liste ne montre aucune action de l'extension avant la déconnexion, celle-ci ne vient probablement pas d'elle.
-
-**Les bios et contacts des leads restent vides**
-Instagram limite souvent l'API qui donne la bio. L'extension la récupère alors en arrière-plan : quelques profils toutes les 6 minutes, ou quand tu ouvres un profil sur instagram.com. Clique sur **Compléter les infos** pour accélérer. Beaucoup de comptes n'affichent simplement aucun email ni téléphone public.
-
-**« Instagram limite temporairement cette requête (429) »**
-Instagram limite certaines requêtes. L'extension se met en pause sur cette requête pendant 15 minutes et passe par une méthode de secours quand elle existe. Attends un peu, puis réessaie.
-
-**« Like non confirmé par Instagram : non compté »**
-Le like n'a pas été enregistré, il n'est donc pas compté. Le journal (Auto-like → Journal) indique les icônes vues sur la page : ouvre une issue avec cette ligne si le problème persiste. Quand le journal indique « clic sur la page », un onglet Instagram épinglé est ouvert en arrière-plan : laisse-le ouvert.
-
-**Les boutons InstaGrowth n'apparaissent pas sur Instagram**
-Recharge la page Instagram (F5). Si tu viens de mettre à jour l'extension, recharge-la aussi dans `chrome://extensions`. Une autre extension Instagram (Inssist, etc.) peut entrer en conflit : désactive-la un moment pour vérifier.
-
-**Les statistiques n'affichent aucune publication**
-Ouvre ton profil sur instagram.com, attends que les publications s'affichent, puis relance l'analyse. L'extension récupère aussi les publications chargées par la page.
-
-**Une erreur s'affiche dans `chrome://extensions`**
-Clique sur **Erreurs** sur la carte InstaGrowth, copie le message et ouvre une [issue](../../issues).
+> **Important.** Automation (auto-like, automatic publishing) goes against Instagram's terms of use and can lead to a temporary block or even a suspension. Use it in moderation: you remain responsible for your account. Only download content you have the right to reuse.
 
 ---
 
-## Confidentialité
+## Troubleshooting
 
-- Tout est stocké **localement dans ton navigateur** : réglages, leads, historique, clés d'IA.
-- Rien n'est envoyé ailleurs qu'à **Instagram**, via ta propre session, et au **fournisseur d'IA** que tu choisis.
-- Aucun serveur InstaGrowth, aucun compte à créer, aucune collecte de données.
+**"Non connecté à Instagram" (not logged in) although I am logged in**
+Reload the instagram.com tab and keep it open. Since v0.6.3, the extension detects the session better and recovers on its own. If needed, click **Réessayer maintenant** (Retry now).
+
+**Instagram logs me out from time to time**
+Open **Réglages & IA → Connexion Instagram**: every logout is recorded there, with the extension's actions in the 15 minutes before it. Automations pause automatically. Most common causes:
+- the **Imiter un iPhone** option of the phone view: turn it off;
+- bursts of requests while testing (lead searches, repeated stats): space them out;
+- DevTools mobile emulation left on in the Instagram tab.
+
+If the list shows no extension activity before the logout, it probably didn't come from the extension.
+
+**Lead bios and contacts stay empty**
+Instagram often limits the API that returns bios. The extension then fetches them in the background: a few profiles every 6 minutes, or when you open a profile on instagram.com. Click **Compléter les infos** to speed it up. Many accounts simply show no public email or phone number.
+
+**"Instagram limite temporairement cette requête (429)"**
+Instagram rate-limits some requests. The extension pauses that request for 15 minutes and uses a fallback method when one exists. Wait a little, then try again.
+
+**"Like non confirmé par Instagram : non compté"**
+The like was not recorded, so it is not counted. The log (Auto-like → Journal) shows the icons seen on the page: open an issue with that line if the problem persists. When the log says "clic sur la page" (click on the page), a pinned Instagram tab is open in the background: keep it open.
+
+**InstaGrowth buttons don't appear on Instagram**
+Reload the Instagram page (F5). If you just updated the extension, reload it too in `chrome://extensions`. Another Instagram extension (Inssist, etc.) may conflict: disable it for a moment to check.
+
+**Stats show no posts**
+Open your profile on instagram.com, wait for the posts to load, then run the analysis again. The extension also picks up posts loaded by the page.
+
+**An error appears in `chrome://extensions`**
+Click **Errors** on the InstaGrowth card, copy the message and open an [issue](../../issues).
 
 ---
 
-## Pour les développeurs
+## Privacy
 
-Extension **Manifest V3** en JavaScript natif (modules ES), sans dépendance ni étape de build. Pour la charger depuis les sources, clone le dépôt puis utilise « Charger l'extension non empaquetée » sur le dossier racine.
+- Everything is stored **locally in your browser**: settings, leads, history, AI keys.
+- Nothing is sent anywhere except **Instagram**, through your own session, and the **AI provider** you choose.
+- No InstaGrowth server, no account to create, no data collection.
+
+---
+
+## For developers
+
+**Manifest V3** extension in plain JavaScript (ES modules), with no dependencies and no build step. To load it from source, clone the repository and use "Load unpacked" on the root folder.
 
 ```
 manifest.json                  Manifest V3
-src/background.js              service worker : moteur d'auto-like, automatisations, leads, follow-backs,
-                               relevés quotidiens, programmation, téléchargements, comptes multiples
-src/lib/ig.js                  client de l'API web Instagram (tous les endpoints non officiels sont ici)
-src/lib/ai.js                  Claude / OpenRouter (OAuth PKCE) / compatible OpenAI
-src/lib/stats.js               calcul des statistiques et diagnostics
-src/lib/limits.js              quotas et pauses
-src/lib/icons.js               jeu d'icônes SVG
-src/lib/store.js, db.js        chrome.storage (réglages) + IndexedDB (leads, posts et médias)
-src/app/                       dashboard (une vue par onglet dans views/)
-src/popup/                     popup de l'icône
-src/content/ig-ui.js           pont réseau (requêtes depuis instagram.com), like par clic, chargeur
-src/content/ig-capture.js      (monde MAIN) lecture des publications chargées par la page, mode fantôme
-src/content/inject/            intégration dans Instagram : navigation, profil, publications, grille, DM, fenêtre
-src/content/claude-connect.js  connexion Claude depuis la console
+src/background.js              service worker: auto-like engine, automations, leads, follow-backs,
+                               daily snapshots, scheduling, downloads, multiple accounts
+src/lib/ig.js                  Instagram web API client (every unofficial endpoint lives here)
+src/lib/ai.js                  Claude / OpenRouter (OAuth PKCE) / OpenAI-compatible
+src/lib/stats.js               stats and diagnostics
+src/lib/limits.js              quotas and pauses
+src/lib/icons.js               SVG icon set
+src/lib/store.js, db.js        chrome.storage (settings) + IndexedDB (leads, posts and media)
+src/app/                       dashboard (one view per tab in views/)
+src/popup/                     toolbar popup
+src/content/ig-ui.js           network bridge (requests from instagram.com), click-to-like, loader
+src/content/ig-capture.js      (MAIN world) reads posts loaded by the page, ghost mode
+src/content/inject/            Instagram integration: navigation, profile, posts, grid, DMs, window
+src/content/claude-connect.js  Claude sign-in from the console
 ```
 
-- Les requêtes vers l'API Instagram sont exécutées par le content script d'un onglet instagram.com : même origine, mêmes cookies, mêmes en-têtes que le site.
-- L'auto-like tourne sur `chrome.alarms`, à raison d'une vérification par minute. Il continue tant que le navigateur est ouvert.
-- Instagram modifie régulièrement son API web. Si une fonction cesse de marcher, les endpoints sont tous dans `src/lib/ig.js`.
+- Requests to the Instagram API run in the content script of an instagram.com tab: same origin, same cookies, same headers as the website.
+- Auto-like runs on `chrome.alarms`, checking once a minute. It keeps going as long as the browser is open.
+- Instagram changes its web API regularly. If a feature stops working, all endpoints are in `src/lib/ig.js`.
